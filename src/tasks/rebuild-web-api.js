@@ -116,7 +116,7 @@ module.exports = function rebuildWebApi(functionName, functionVersion, restApiId
 				},
 				authorizationScopes = function () {
 					return methodOptions && methodOptions.authorizationScopes;
-				}
+				},
 				parameters = flattenRequestParameters(methodOptions.requestParameters, path);
 			return apiGateway.putMethodPromise({
 				authorizationType: authorizationType(),
