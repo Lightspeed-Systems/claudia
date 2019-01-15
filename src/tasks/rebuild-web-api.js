@@ -114,6 +114,9 @@ module.exports = function rebuildWebApi(functionName, functionVersion, restApiId
 					const authorizerName = methodOptions.customAuthorizer || methodOptions.cognitoAuthorizer;
 					return methodOptions && authorizerName && authorizerIds[authorizerName];
 				},
+				authorizationScopes = function () {
+					return methodOptions && methodOptions.authorizationScopes;
+				}
 				parameters = flattenRequestParameters(methodOptions.requestParameters, path);
 			return apiGateway.putMethodPromise({
 				authorizationType: authorizationType(),
@@ -122,7 +125,8 @@ module.exports = function rebuildWebApi(functionName, functionVersion, restApiId
 				resourceId: resourceId,
 				restApiId: restApiId,
 				requestParameters: parameters,
-				apiKeyRequired: apiKeyRequired()
+				apiKeyRequired: apiKeyRequired(),
+				authorizationScopes: authorizationScopes()
 			})
 			.then(() => putLambdaIntegration(resourceId, methodName, credentials(), parameters && Object.keys(parameters), methodOptions.requestContentHandling))
 			.then(addMethodResponse);
