@@ -5,7 +5,9 @@ const loadConfig = require('../util/loadconfig'),
 	retry = require('oh-no-i-insist'),
 	findCloudfrontBehavior = require('../tasks/find-cloudfront-behavior'),
 	patchLambdaFunctionAssociations = require('../tasks/patch-lambda-function-associations'),
-	aws = require('aws-sdk');
+	{ LambdaClient, GetFunctionConfigurationCommand } = require('@aws-sdk/client-lambda'),
+	{ IAMClient, GetRoleCommand, UpdateAssumeRolePolicyCommand } = require('@aws-sdk/client-iam'),
+	{ CloudFrontClient, GetDistributionConfigCommand, UpdateDistributionCommand } = require('@aws-sdk/client-cloudfront');
 
 module.exports = function setCloudFrontTrigger(options, optionalLogger) {
 	'use strict';
@@ -30,21 +32,21 @@ to propagate changes to Lambda@Edge.
 			console.log(`\x1b[3${color}m${text}\x1b[0m`);
 		},
 		initServices = function (config) {
-			lambda = loggingWrap(new aws.Lambda({region: config.region}), {log: logger.logApiCall, logName: 'lambda'});
-			iam = loggingWrap(new aws.IAM({region: config.region}), {log: logger.logApiCall, logName: 'iam'});
-			cloudFront = loggingWrap(new aws.CloudFront({region: config.region}), {log: logger.logApiCall, logName: 'cloudfront'});
+			lambda = loggingWrap(new LambdaClient({region: config.region}), {log: logger.logApiCall, logName: 'lambda'});
+			iam = loggingWrap(new IAMClient({region: config.region}), {log: logger.logApiCall, logName: 'iam'});
+			cloudFront = loggingWrap(new CloudFrontClient({region: config.region}), {log: logger.logApiCall, logName: 'cloudfront'});
 		},
 		readConfig = function () {
 			const version = String(options.version);
 			return loadConfig(options, {lambda: {name: true, region: true, role: true}})
 				.then(config => lambdaConfig = config.lambda)
 				.then(initServices)
-				.then(() => lambda.getFunctionConfiguration({FunctionName: lambdaConfig.name, Qualifier: version}).promise())
+				.then(() => lambda.send(new GetFunctionConfigurationCommand({FunctionName: lambdaConfig.name, Qualifier: version})))
 				.then(result => {
 					if (result.Version === version) {
 						return result;
 					}
-					return lambda.getFunctionConfiguration({FunctionName: lambdaConfig.name, Qualifier: result.Version}).promise();
+					return lambda.send(new GetFunctionConfigurationCommand({FunctionName: lambdaConfig.name, Qualifier: result.Version}));
 				})
 				.then(result => {
 					lambdaConfig.arn = result.FunctionArn;
@@ -52,20 +54,19 @@ to propagate changes to Lambda@Edge.
 				});
 		},
 		upgradeAssumeRolePolicy = function () {
-			return iam.getRole({RoleName: lambdaConfig.role}).promise()
+			return iam.send(new GetRoleCommand({RoleName: lambdaConfig.role}))
 				.then(result => {
 					const policyDocument = unescape((result.Role.AssumeRolePolicyDocument)),
 						upgradedPolicyDocument = appendServiceToRole(policyDocument, 'edgelambda.amazonaws.com');
 					if (policyDocument !== upgradedPolicyDocument) {
-						return iam.updateAssumeRolePolicy({RoleName: lambdaConfig.role, PolicyDocument: upgradedPolicyDocument}).promise();
+						return iam.send(new UpdateAssumeRolePolicyCommand({RoleName: lambdaConfig.role, PolicyDocument: upgradedPolicyDocument}));
 					}
 				});
 		},
 		setEventTriggers = function () {
-
-			return cloudFront.getDistributionConfig({
+			return cloudFront.send(new GetDistributionConfigCommand({
 				Id: distributionId
-			}).promise()
+			}))
 			.then(result => {
 				const config = result.DistributionConfig,
 					etag = result.ETag,
@@ -76,15 +77,15 @@ to propagate changes to Lambda@Edge.
 				patchLambdaFunctionAssociations(behavior.LambdaFunctionAssociations, options['event-types'].split(','), lambdaConfig.arn);
 				return retry(
 					() => {
-						return cloudFront.updateDistribution({
+						return cloudFront.send(new UpdateDistributionCommand({
 							Id: distributionId,
 							DistributionConfig: config,
 							IfMatch: etag
-						}).promise();
+						}));
 					},
 					awsDelay,
 					awsRetries,
-					failure => failure.code === 'InvalidLambdaFunctionAssociation',
+					failure => failure.name === 'InvalidLambdaFunctionAssociation',
 					() => {},
 					Promise
 				);

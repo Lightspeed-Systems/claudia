@@ -4,7 +4,10 @@ const underTest = require('../src/commands/destroy'),
 	tmppath = require('../src/util/tmppath'),
 	fs = require('fs'),
 	path = require('path'),
-	aws = require('aws-sdk'),
+	{ IAMClient, GetRoleCommand, ListRolePoliciesCommand } = require('@aws-sdk/client-iam'),
+	{ LambdaClient, ListVersionsByFunctionCommand } = require('@aws-sdk/client-lambda'),
+	{ APIGatewayClient } = require('@aws-sdk/client-api-gateway'),
+	apiGwCommands = require('@aws-sdk/client-api-gateway'),
 	readjson = require('../src/util/readjson'),
 	fsPromise = require('../src/util/fs-promise'),
 	fsUtil = require('../src/util/fs-util'),
@@ -15,7 +18,7 @@ describe('destroy', () => {
 	beforeEach(() => {
 		workingdir = tmppath();
 		testRunName = 'test' + Date.now();
-		iam = new aws.IAM({ region: awsRegion });
+		iam = new IAMClient({ region: awsRegion });
 		newObjects = { workingdir: workingdir };
 		fs.mkdirSync(workingdir);
 	});
@@ -49,21 +52,21 @@ describe('destroy', () => {
 		it('destroys the lambda function', done => {
 			underTest({ source: workingdir })
 			.then(() => {
-				const lambda = new aws.Lambda({ region: awsRegion });
-				return lambda.listVersionsByFunction({ FunctionName: testRunName }).promise();
+				const lambda = new LambdaClient({ region: awsRegion });
+				return lambda.send(new ListVersionsByFunctionCommand({ FunctionName: testRunName }));
 			})
 			.catch(expectedException => expect(expectedException.message).toContain(newObjects.lambdaFunction))
 			.then(done, done.fail);
 		});
 		it('destroys the roles for the lambda function', done => {
 			underTest({ source: workingdir })
-			.then(() => iam.getRole({ RoleName: newObjects.lambdaRole }).promise())
-			.catch(expectedException => expect(expectedException.code).toEqual('NoSuchEntity'))
+			.then(() => iam.send(new GetRoleCommand({ RoleName: newObjects.lambdaRole })))
+			.catch(expectedException => expect(expectedException.name).toEqual('NoSuchEntity'))
 			.then(done, done.fail);
 		});
 		it('destroys the policies for the lambda function', done => {
 			underTest({ source: workingdir })
-			.then(() => iam.listRolePolicies({ RoleName: newObjects.lambdaRole }).promise())
+			.then(() => iam.send(new ListRolePoliciesCommand({ RoleName: newObjects.lambdaRole })))
 			.catch(expectedException => expect(expectedException.message).toContain(newObjects.lambdaRole))
 			.then(done, done.fail);
 		});
@@ -75,7 +78,7 @@ describe('destroy', () => {
 				return fsPromise.writeFileAsync(configPath, JSON.stringify(json), 'utf8');
 			})
 			.then(() => underTest({ source: workingdir }))
-			.then(() => iam.getRole({ RoleName: newObjects.lambdaRole }).promise())
+			.then(() => iam.send(new GetRoleCommand({ RoleName: newObjects.lambdaRole })))
 			.then(done, done.fail);
 		});
 
@@ -123,8 +126,8 @@ describe('destroy', () => {
 		it('destroys the lambda function', done => {
 			underTest({ source: workingdir })
 			.then(() => {
-				const lambda = new aws.Lambda({ region: awsRegion });
-				return lambda.listVersionsByFunction({ FunctionName: testRunName }).promise();
+				const lambda = new LambdaClient({ region: awsRegion });
+				return lambda.send(new ListVersionsByFunctionCommand({ FunctionName: testRunName }));
 			})
 			.catch(expectedException => expect(expectedException.message).toContain(newObjects.lambdaFunction))
 			.then(done, done.fail);
@@ -133,24 +136,24 @@ describe('destroy', () => {
 		it('destroys the web api', done => {
 			underTest({ source: workingdir })
 			.then(() => {
-				const apiGateway = retriableWrap(new aws.APIGateway({ region: awsRegion }));
-				return apiGateway.getRestApi({ restApiId: newObjects.restApi }).promise();
+				const apiGateway = retriableWrap(new APIGatewayClient({ region: awsRegion }), apiGwCommands);
+				return apiGateway.getRestApiPromise({ restApiId: newObjects.restApi });
 			})
 			.catch(expectedException => {
 				expect(expectedException.message).toMatch(/^Invalid API identifier specified/);
-				expect(expectedException.code).toEqual('NotFoundException');
+				expect(expectedException.name).toEqual('NotFoundException');
 			})
 			.then(done, done.fail);
 		});
 		it('destroys the roles for the lambda function', done => {
 			underTest({ source: workingdir })
-			.then(() => iam.getRole({ RoleName: newObjects.lambdaRole }).promise())
-			.catch(expectedException => expect(expectedException.code).toEqual('NoSuchEntity'))
+			.then(() => iam.send(new GetRoleCommand({ RoleName: newObjects.lambdaRole })))
+			.catch(expectedException => expect(expectedException.name).toEqual('NoSuchEntity'))
 			.then(done, done.fail);
 		});
 		it('destroys the policies for the lambda function', done => {
 			underTest({ source: workingdir })
-			.then(() => iam.listRolePolicies({ RoleName: newObjects.lambdaRole }).promise())
+			.then(() => iam.send(new ListRolePoliciesCommand({ RoleName: newObjects.lambdaRole })))
 			.catch(expectedException => expect(expectedException.message).toContain(newObjects.lambdaRole))
 			.then(done, done.fail);
 		});

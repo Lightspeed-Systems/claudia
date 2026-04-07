@@ -1,5 +1,5 @@
 
-const aws = require('aws-sdk'),
+const { CognitoIdentityProviderClient, CreateUserPoolCommand, CreateUserPoolClientCommand, DeleteUserPoolCommand } = require('@aws-sdk/client-cognito-identity-provider'),
 	awsRegion = require('./test-aws-region'),
 	getOwnerInfo = require('../../src/tasks/get-owner-info'),
 	userPoolName = 'test-user-pool-' + Date.now();
@@ -8,8 +8,8 @@ let userPoolId, userPoolArn, idToken;
 
 module.exports.create = function create() {
 	'use strict';
-	const cognitoIdentityServiceProvider = new aws.CognitoIdentityServiceProvider({ region: awsRegion });
-	return cognitoIdentityServiceProvider.createUserPool({
+	const cognitoIdentityServiceProvider = new CognitoIdentityProviderClient({ region: awsRegion });
+	return cognitoIdentityServiceProvider.send(new CreateUserPoolCommand({
 		PoolName: userPoolName,
 		Schema: [
 			{
@@ -34,7 +34,7 @@ module.exports.create = function create() {
 				'Required': true
 			}
 		]
-	}).promise()
+	}))
 	.then(result => {
 		userPoolId = result.UserPool.Id;
 	})
@@ -55,15 +55,15 @@ module.exports.create = function create() {
 			SupportedIdentityProviders: ['COGNITO']
 
 		};
-		return cognitoIdentityServiceProvider.createUserPoolClient(params).promise();
+		return cognitoIdentityServiceProvider.send(new CreateUserPoolClientCommand(params));
 	});
 };
 
 module.exports.destroy = function () {
 	'use strict';
 	if (userPoolId) {
-		const cognitoIdentityServiceProvider = new aws.CognitoIdentityServiceProvider({ region: awsRegion });
-		return cognitoIdentityServiceProvider.deleteUserPool({ UserPoolId: userPoolId }).promise();
+		const cognitoIdentityServiceProvider = new CognitoIdentityProviderClient({ region: awsRegion });
+		return cognitoIdentityServiceProvider.send(new DeleteUserPoolCommand({ UserPoolId: userPoolId }));
 	}
 };
 

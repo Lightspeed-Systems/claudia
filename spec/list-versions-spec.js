@@ -2,7 +2,7 @@ const listVersions = require('../src/tasks/list-versions'),
 	tmppath = require('../src/util/tmppath'),
 	create = require('../src/commands/create'),
 	update = require('../src/commands/update'),
-	aws = require('aws-sdk'),
+	{ LambdaClient } = require('@aws-sdk/client-lambda'),
 	awsRegion = require('./util/test-aws-region'),
 	fs = require('fs'),
 	fsUtil = require('../src/util/fs-util'),
@@ -16,7 +16,7 @@ describe('listVersions', () => {
 	beforeEach(() => {
 		workingdir = tmppath();
 		testRunName = 'test' + Date.now();
-		lambda = new aws.Lambda({region: awsRegion});
+		lambda = new LambdaClient({region: awsRegion});
 		newObjects = {workingdir: workingdir};
 		fs.mkdirSync(workingdir);
 	});

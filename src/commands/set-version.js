@@ -1,4 +1,6 @@
-const aws = require('aws-sdk'),
+const apiGwCommands = require('@aws-sdk/client-api-gateway'),
+	{ APIGatewayClient } = require('@aws-sdk/client-api-gateway'),
+	{ LambdaClient, GetFunctionConfigurationCommand, PublishVersionCommand } = require('@aws-sdk/client-lambda'),
 	loadConfig = require('../util/loadconfig'),
 	allowApiInvocation = require('../tasks/allow-api-invocation'),
 	retriableWrap = require('../util/retriable-wrap'),
@@ -28,7 +30,7 @@ module.exports = function setVersion(options, optionalLogger) {
 		updateConfiguration = function () {
 			logger.logStage('updating configuration');
 			return Promise.resolve()
-				.then(() => lambda.getFunctionConfiguration({FunctionName: lambdaConfig.name}).promise())
+				.then(() => lambda.send(new GetFunctionConfigurationCommand({FunctionName: lambdaConfig.name})))
 				.then(functionConfiguration => updateEnvVars(options, lambda, lambdaConfig.name, functionConfiguration.Environment && functionConfiguration.Environment.Variables));
 		};
 
@@ -45,19 +47,20 @@ module.exports = function setVersion(options, optionalLogger) {
 	.then(config => {
 		lambdaConfig = config.lambda;
 		apiConfig = config.api;
-		lambda = loggingWrap(new aws.Lambda({region: lambdaConfig.region}), {log: logger.logApiCall, logName: 'lambda'});
+		lambda = loggingWrap(new LambdaClient({region: lambdaConfig.region}), {log: logger.logApiCall, logName: 'lambda'});
 		apiGateway = retriableWrap(
 			loggingWrap(
-				new aws.APIGateway({region: lambdaConfig.region}),
+				new APIGatewayClient({region: lambdaConfig.region}),
 				{log: logger.logApiCall, logName: 'apigateway'}
 			),
+			apiGwCommands,
 			() => logger.logStage('rate-limited by AWS, waiting before retry')
 		);
 	})
 	.then(updateConfiguration)
 	.then(() => {
 		logger.logStage('updating versions');
-		return lambda.publishVersion({FunctionName: lambdaConfig.name}).promise();
+		return lambda.send(new PublishVersionCommand({FunctionName: lambdaConfig.name}));
 	})
 	.then(versionResult => markAlias(lambdaConfig.name, lambda, versionResult.Version, options.version))
 	.then(() => {

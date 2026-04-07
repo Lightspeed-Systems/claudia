@@ -1,4 +1,4 @@
-const aws = require('aws-sdk'),
+const { CognitoIdentityProviderClient, CreateUserPoolCommand, CreateUserPoolClientCommand, SignUpCommand, AdminConfirmSignUpCommand, AdminInitiateAuthCommand, DeleteUserPoolCommand } = require('@aws-sdk/client-cognito-identity-provider'),
 	awsRegion = require('./test-aws-region'),
 	getOwnerInfo = require('../../src/tasks/get-owner-info'),
 	userPoolName = 'test-user-pool-' + Date.now();
@@ -7,8 +7,8 @@ let userPoolId, clientId, userPoolArn, idToken;
 
 module.exports.create = function create() {
 	'use strict';
-	const cognitoIdentityServiceProvider = new aws.CognitoIdentityServiceProvider({ region: awsRegion });
-	return cognitoIdentityServiceProvider.createUserPool({ PoolName: userPoolName }).promise()
+	const cognitoIdentityServiceProvider = new CognitoIdentityProviderClient({ region: awsRegion });
+	return cognitoIdentityServiceProvider.send(new CreateUserPoolCommand({ PoolName: userPoolName }))
 	.then(result => {
 		userPoolId = result.UserPool.Id;
 	})
@@ -23,7 +23,7 @@ module.exports.create = function create() {
 			GenerateSecret: false,
 			ExplicitAuthFlows: ['ADMIN_NO_SRP_AUTH']
 		};
-		return cognitoIdentityServiceProvider.createUserPoolClient(params).promise();
+		return cognitoIdentityServiceProvider.send(new CreateUserPoolClientCommand(params));
 	})
 	.then(result => {
 		clientId = result.UserPoolClient.ClientId;
@@ -34,14 +34,14 @@ module.exports.create = function create() {
 			Username: 'Bob-123',
 			Password: 'Password1!'
 		};
-		return cognitoIdentityServiceProvider.signUp(params).promise();
+		return cognitoIdentityServiceProvider.send(new SignUpCommand(params));
 	})
 	.then(() => {
 		const params = {
 			UserPoolId: userPoolId,
 			Username: 'Bob-123'
 		};
-		return cognitoIdentityServiceProvider.adminConfirmSignUp(params).promise();
+		return cognitoIdentityServiceProvider.send(new AdminConfirmSignUpCommand(params));
 	})
 	.then(() => {
 		const params = {
@@ -53,7 +53,7 @@ module.exports.create = function create() {
 				PASSWORD: 'Password1!'
 			}
 		};
-		return cognitoIdentityServiceProvider.adminInitiateAuth(params).promise();
+		return cognitoIdentityServiceProvider.send(new AdminInitiateAuthCommand(params));
 	})
 	.then(result => {
 		idToken = result.AuthenticationResult.IdToken;
@@ -63,8 +63,8 @@ module.exports.create = function create() {
 module.exports.destroy = function () {
 	'use strict';
 	if (userPoolId) {
-		const cognitoIdentityServiceProvider = new aws.CognitoIdentityServiceProvider({ region: awsRegion });
-		return cognitoIdentityServiceProvider.deleteUserPool({ UserPoolId: userPoolId }).promise();
+		const cognitoIdentityServiceProvider = new CognitoIdentityProviderClient({ region: awsRegion });
+		return cognitoIdentityServiceProvider.send(new DeleteUserPoolCommand({ UserPoolId: userPoolId }));
 	}
 };
 

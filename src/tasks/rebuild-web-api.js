@@ -1,4 +1,5 @@
-const aws = require('aws-sdk'),
+const apiGwCommands = require('@aws-sdk/client-api-gateway'),
+	{ APIGatewayClient } = require('@aws-sdk/client-api-gateway'),
 	validAuthType = require('../util/valid-auth-type'),
 	sequentialPromiseMap = require('sequential-promise-map'),
 	validCredentials = require('../util/valid-credentials'),
@@ -18,9 +19,10 @@ module.exports = function rebuildWebApi(functionName, functionVersion, restApiId
 	const logger = optionalLogger || new NullLogger(),
 		apiGateway = retriableWrap(
 			loggingWrap(
-				new aws.APIGateway({region: awsRegion}),
+				new APIGatewayClient({region: awsRegion}),
 				{log: logger.logApiCall, logName: 'apigateway'}
 			),
+			apiGwCommands,
 			() => logger.logApiCall('rate-limited by AWS, waiting before retry')
 		),
 		configHash = safeHash(apiConfig),

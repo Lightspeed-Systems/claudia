@@ -4,7 +4,11 @@ const zipdir = require('../tasks/zipdir'),
 	os = require('os'),
 	path = require('path'),
 	cleanUpPackage = require('../tasks/clean-up-package'),
-	aws = require('aws-sdk'),
+	apiGwCommands = require('@aws-sdk/client-api-gateway'),
+	{ APIGatewayClient } = require('@aws-sdk/client-api-gateway'),
+	{ LambdaClient, GetFunctionConfigurationCommand, UpdateFunctionCodeCommand, UpdateFunctionConfigurationCommand } = require('@aws-sdk/client-lambda'),
+	{ S3Client } = require('@aws-sdk/client-s3'),
+	{ IAMClient, PutRolePolicyCommand } = require('@aws-sdk/client-iam'),
 	allowApiInvocation = require('../tasks/allow-api-invocation'),
 	lambdaCode = require('../tasks/lambda-code'),
 	markAlias = require('../tasks/mark-alias'),
@@ -72,8 +76,7 @@ module.exports = function update(options, optionalLogger) {
 								apiCacheReused: rebuildResult.cacheReused
 							},
 							{
-								apiGatewayPromise: apiGateway,
-								aws: aws
+								apiGatewayPromise: apiGateway
 							}
 						);
 					}
@@ -135,12 +138,12 @@ module.exports = function update(options, optionalLogger) {
 				configurationPatch.FunctionName = lambdaConfig.name;
 				return retry(
 					() => {
-						return lambda.updateFunctionConfiguration(configurationPatch).promise();
+						return lambda.send(new UpdateFunctionConfigurationCommand(configurationPatch));
 					},
 					awsDelay, awsRetries,
 					error => {
 						return error &&
-							error.code === 'InvalidParameterValueException' &&
+							error.name === 'InvalidParameterValueException' &&
 							error.message.startsWith('The provided execution role does not have permissions');
 					},
 					() => logger.logStage('waiting for IAM role propagation'),
@@ -216,18 +219,19 @@ module.exports = function update(options, optionalLogger) {
 	.then(config => {
 		lambdaConfig = config.lambda;
 		apiConfig = config.api;
-		lambda = loggingWrap(new aws.Lambda({region: lambdaConfig.region}), {log: logger.logApiCall, logName: 'lambda'});
-		s3 = loggingWrap(new aws.S3({region: lambdaConfig.region, signatureVersion: 'v4'}), {log: logger.logApiCall, logName: 's3'});
-		iam = loggingWrap(new aws.IAM({region: lambdaConfig.region}), {log: logger.logApiCall, logName: 'iam'});
+		lambda = loggingWrap(new LambdaClient({region: lambdaConfig.region}), {log: logger.logApiCall, logName: 'lambda'});
+		s3 = loggingWrap(new S3Client({region: lambdaConfig.region}), {log: logger.logApiCall, logName: 's3'});
+		iam = loggingWrap(new IAMClient({region: lambdaConfig.region}), {log: logger.logApiCall, logName: 'iam'});
 		apiGateway = retriableWrap(
 			loggingWrap(
-				new aws.APIGateway({region: lambdaConfig.region}),
+				new APIGatewayClient({region: lambdaConfig.region}),
 				{log: logger.logApiCall, logName: 'apigateway'}
 			),
+			apiGwCommands,
 			() => logger.logStage('rate-limited by AWS, waiting before retry')
 		);
 	})
-	.then(() => lambda.getFunctionConfiguration({FunctionName: lambdaConfig.name}).promise())
+	.then(() => lambda.send(new GetFunctionConfigurationCommand({FunctionName: lambdaConfig.name})))
 	.then(result => {
 		functionConfig = result;
 		requiresHandlerUpdate = apiConfig && apiConfig.id && /\.router$/.test(functionConfig.Handler);
@@ -263,7 +267,7 @@ module.exports = function update(options, optionalLogger) {
 					PolicyName: 'dlq-publisher',
 					PolicyDocument: snsPublishPolicy(getSnsDLQTopic())
 				};
-				return iam.putRolePolicy(policyUpdate).promise();
+				return iam.send(new PutRolePolicyCommand(policyUpdate));
 			}
 		}
 	})
@@ -297,7 +301,7 @@ module.exports = function update(options, optionalLogger) {
 		if (options.arch) {
 			functionCode.Architectures = [options.arch];
 		}
-		return lambda.updateFunctionCode(functionCode).promise();
+		return lambda.send(new UpdateFunctionCodeCommand(functionCode));
 	})
 	.then(result => {
 		logger.logStage('waiting for lambda resource allocation');

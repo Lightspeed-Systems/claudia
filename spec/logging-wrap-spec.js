@@ -1,5 +1,5 @@
 const underTest = require('../src/util/logging-wrap'),
-	aws = require('aws-sdk');
+	{ STSClient, GetCallerIdentityCommand } = require('@aws-sdk/client-sts');
 describe('loggingWrap', () => {
 	'use strict';
 	let target, logger, originalMethods;
@@ -39,11 +39,11 @@ describe('loggingWrap', () => {
 		});
 	});
 	it('wraps API objects', done => {
-		const sts = underTest(new aws.STS(), { log: logger, logName: 'sts' });
-		sts.getCallerIdentity().promise()
+		const sts = underTest(new STSClient({region: 'us-east-1'}), { log: logger, logName: 'sts' });
+		sts.send(new GetCallerIdentityCommand({}))
 		.then(callerIdentity => {
 			expect(callerIdentity.Account).not.toBeUndefined();
-			expect(logger).toHaveBeenCalledWith('sts.getCallerIdentity', []);
+			expect(logger).toHaveBeenCalledWith('sts.GetCallerIdentityCommand', [{}]);
 		})
 		.then(done, done.fail);
 	});

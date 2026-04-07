@@ -2,7 +2,9 @@ const loadConfig = require('../util/loadconfig'),
 	isRoleArn = require('../util/is-role-arn'),
 	isKinesisArn = require('../util/is-kinesis-arn'),
 	retry = require('oh-no-i-insist'),
-	aws = require('aws-sdk');
+	{ LambdaClient, GetFunctionConfigurationCommand, CreateEventSourceMappingCommand } = require('@aws-sdk/client-lambda'),
+	{ IAMClient, AttachRolePolicyCommand } = require('@aws-sdk/client-iam'),
+	{ KinesisClient, DescribeStreamCommand } = require('@aws-sdk/client-kinesis');
 
 module.exports = function addKinesisEventSource(options, logger) {
 	'use strict';
@@ -13,11 +15,11 @@ module.exports = function addKinesisEventSource(options, logger) {
 	const awsDelay = Number(options['aws-delay']) || 5000,
 		awsRetries = Number(options['aws-retries']) || 15,
 		initServices = function () {
-			lambda = new aws.Lambda({region: lambdaConfig.region});
-			iam = new aws.IAM({region: lambdaConfig.region});
-			kinesis = new aws.Kinesis({region: lambdaConfig.region});
+			lambda = new LambdaClient({region: lambdaConfig.region});
+			iam = new IAMClient({region: lambdaConfig.region});
+			kinesis = new KinesisClient({region: lambdaConfig.region});
 		},
-		getLambda = () => lambda.getFunctionConfiguration({FunctionName: lambdaConfig.name, Qualifier: options.version}).promise(),
+		getLambda = () => lambda.send(new GetFunctionConfigurationCommand({FunctionName: lambdaConfig.name, Qualifier: options.version})),
 		readConfig = function () {
 			return loadConfig(options, {lambda: {name: true, region: true}})
 				.then(config => {
@@ -32,19 +34,19 @@ module.exports = function addKinesisEventSource(options, logger) {
 		},
 		upgradeRolePolicy = function () {
 			if (!isRoleArn(lambdaConfig.role) && !options['skip-iam']) {
-				return iam.attachRolePolicy({
+				return iam.send(new AttachRolePolicyCommand({
 					RoleName: lambdaConfig.role,
 					PolicyArn: 'arn:aws:iam::aws:policy/service-role/AWSLambdaKinesisExecutionRole'
-				}).promise();
+				}));
 			}
 		},
 		getKinesisArn = function () {
 			if (isKinesisArn(options.stream)) {
 				return options.stream;
 			} else {
-				return kinesis.describeStream({
+				return kinesis.send(new DescribeStreamCommand({
 					StreamName: options.stream
-				}).promise()
+				}))
 				.then(result => result.StreamDescription.StreamARN);
 			}
 		},
@@ -57,14 +59,14 @@ module.exports = function addKinesisEventSource(options, logger) {
 					StartingPositionTimestamp: options['starting-timestamp'],
 					BatchSize: options['batch-size']
 				};
-			return lambda.createEventSourceMapping(params).promise();
+			return lambda.send(new CreateEventSourceMappingCommand(params));
 		},
 		retriableAddEventSource = function (kinesisArn) {
 			return retry(
 				() => addEventSource(kinesisArn),
 				awsDelay,
 				awsRetries,
-				failure => failure.code === 'InvalidParameterValueException',
+				failure => failure.name === 'InvalidParameterValueException',
 				() => {
 					if (logger) {
 						logger.logStage('waiting for IAM role propagation');

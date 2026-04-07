@@ -1,7 +1,8 @@
 const loadConfig = require('../util/loadconfig'),
 	parseKeyValueCSV = require('../util/parse-key-value-csv'),
 	getOwnerInfo = require('../tasks/get-owner-info'),
-	aws = require('aws-sdk');
+	{ LambdaClient, GetFunctionConfigurationCommand, TagResourceCommand: LambdaTagResourceCommand } = require('@aws-sdk/client-lambda'),
+	{ APIGatewayClient, TagResourceCommand: APIGWTagResourceCommand } = require('@aws-sdk/client-api-gateway');
 
 module.exports = function tag(options) {
 	'use strict';
@@ -12,10 +13,10 @@ module.exports = function tag(options) {
 		region,
 		api;
 	const initServices = function () {
-			lambda = new aws.Lambda({region: lambdaConfig.region});
-			api = new aws.APIGateway({region: lambdaConfig.region});
+			lambda = new LambdaClient({region: lambdaConfig.region});
+			api = new APIGatewayClient({region: lambdaConfig.region});
 		},
-		getLambda = () => lambda.getFunctionConfiguration({FunctionName: lambdaConfig.name, Qualifier: options.version}).promise(),
+		getLambda = () => lambda.send(new GetFunctionConfigurationCommand({FunctionName: lambdaConfig.name, Qualifier: options.version})),
 		readConfig = function () {
 			return loadConfig(options, {lambda: {name: true, region: true}})
 				.then(config => {
@@ -35,17 +36,17 @@ module.exports = function tag(options) {
 				});
 		},
 		tagLambda = function (tags) {
-			return lambda.tagResource({
+			return lambda.send(new LambdaTagResourceCommand({
 				Resource: lambdaConfig.arn,
 				Tags: tags
-			}).promise();
+			}));
 		},
 		tagApi = function (tags) {
 			if (apiConfig && apiConfig.id) {
-				return api.tagResource({
+				return api.send(new APIGWTagResourceCommand({
 					resourceArn: `arn:${awsPartition}:apigateway:${lambdaConfig.region}::/restapis/${apiConfig.id}`,
 					tags: tags
-				}).promise();
+				}));
 			}
 		},
 		tag = function (tags) {

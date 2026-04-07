@@ -1,9 +1,9 @@
 const retry = require('oh-no-i-insist'),
-	aws = require('aws-sdk');
+	{ CloudWatchLogsClient, FilterLogEventsCommand } = require('@aws-sdk/client-cloudwatch-logs');
 
 module.exports = function pollForLogEvents(logGroup, filterPattern, awsRegion) {
 	'use strict';
-	const logs = new aws.CloudWatchLogs({ region: awsRegion }),
+	const logs = new CloudWatchLogsClient({ region: awsRegion }),
 		retryTimeout = process.env.AWS_DEPLOY_TIMEOUT || 10000,
 		retries = process.env.AWS_DEPLOY_RETRIES || 5,
 		checkForMatchingEvents = function (logEvents) {
@@ -15,8 +15,7 @@ module.exports = function pollForLogEvents(logGroup, filterPattern, awsRegion) {
 		};
 
 	return retry(() => {
-		return logs.filterLogEvents({ logGroupName: logGroup, filterPattern: filterPattern})
-		.promise()
+		return logs.send(new FilterLogEventsCommand({ logGroupName: logGroup, filterPattern: filterPattern}))
 		.then(checkForMatchingEvents);
 	}, retryTimeout, retries, undefined, undefined, Promise);
 };

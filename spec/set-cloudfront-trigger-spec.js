@@ -4,7 +4,8 @@ const underTest = require('../src/commands/set-cloudfront-trigger'),
 	destroyObjects = require('./util/destroy-objects'),
 	tmppath = require('../src/util/tmppath'),
 	fsUtil = require('../src/util/fs-util'),
-	aws = require('aws-sdk'),
+	{ CloudFrontClient, GetDistributionConfigCommand } = require('@aws-sdk/client-cloudfront'),
+	{ IAMClient, GetRoleCommand } = require('@aws-sdk/client-iam'),
 	fs = require('fs'),
 	awsRegion = require('./util/test-aws-region'),
 	distributionId = process.env.CLOUDFRONT_DISTRIBUTION_ID;
@@ -16,8 +17,8 @@ describe('setCloudfrontTrigger', () => {
 	let workingdir, testRunName, newObjects, config, cloudfront, iam;
 	beforeEach(() => {
 		workingdir = tmppath();
-		cloudfront = new aws.CloudFront();
-		iam = new aws.IAM({region: awsRegion});
+		cloudfront = new CloudFrontClient();
+		iam = new IAMClient({region: awsRegion});
 		testRunName = 'test' + Date.now();
 		newObjects = { workingdir: workingdir };
 		fs.mkdirSync(workingdir);
@@ -84,7 +85,7 @@ describe('setCloudfrontTrigger', () => {
 					.then(done, done.fail);
 			});
 			it('assigns the events for the actual numeric version', done => {
-				cloudfront.getDistributionConfig({Id: distributionId}).promise()
+				cloudfront.send(new GetDistributionConfigCommand({Id: distributionId}))
 					.then(result => extractLambdaAssociations(result.DistributionConfig))
 					.then(associations => {
 						expect(associations['viewer-request']).toMatch(new RegExp(`${testRunName}:1$`));
@@ -101,7 +102,7 @@ describe('setCloudfrontTrigger', () => {
 					.then(done, done.fail);
 			});
 			it('assigns the events for the given version', done => {
-				cloudfront.getDistributionConfig({Id: distributionId}).promise()
+				cloudfront.send(new GetDistributionConfigCommand({Id: distributionId}))
 					.then(result => extractLambdaAssociations(result.DistributionConfig))
 					.then(associations => {
 						expect(associations['viewer-request']).toMatch(new RegExp(`${testRunName}:1$`));
@@ -118,7 +119,7 @@ describe('setCloudfrontTrigger', () => {
 					.then(done, done.fail);
 			});
 			it('allows function to assume role lambda@edge', done => {
-				iam.getRole({RoleName: newObjects.lambdaRole}).promise()
+				iam.send(new GetRoleCommand({RoleName: newObjects.lambdaRole}))
 					.then(result => {
 						const policyDocument = unescape((result.Role.AssumeRolePolicyDocument)),
 							policy = JSON.parse(policyDocument);
@@ -131,7 +132,7 @@ describe('setCloudfrontTrigger', () => {
 			});
 			it('does not change the policy if it already supports lambda@edge', done => {
 				underTest(config)
-					.then(() =>	iam.getRole({RoleName: newObjects.lambdaRole}).promise())
+					.then(() =>	iam.send(new GetRoleCommand({RoleName: newObjects.lambdaRole})))
 					.then(result => {
 						const policyDocument = unescape((result.Role.AssumeRolePolicyDocument)),
 							policy = JSON.parse(policyDocument);
@@ -151,7 +152,7 @@ describe('setCloudfrontTrigger', () => {
 				let distributionConfig;
 				config['path-pattern'] = '/dev';
 				underTest(config)
-					.then(() => cloudfront.getDistributionConfig({Id: distributionId}).promise())
+					.then(() => cloudfront.send(new GetDistributionConfigCommand({Id: distributionId})))
 					.then(result => distributionConfig = result.DistributionConfig)
 					.then(() => extractLambdaAssociations(distributionConfig, '/dev'))
 					.then(associations => {
@@ -173,7 +174,7 @@ describe('setCloudfrontTrigger', () => {
 					.catch(e => {
 						expect(e).toEqual(`Distribution ${distributionId} does not contain a behavior matching path pattern /not-exists`);
 					})
-					.then(() => cloudfront.getDistributionConfig({Id: distributionId}).promise())
+					.then(() => cloudfront.send(new GetDistributionConfigCommand({Id: distributionId})))
 					.then(result => distributionConfig = result.DistributionConfig)
 					.then(() => extractLambdaAssociations(distributionConfig))
 					.then(associations => {

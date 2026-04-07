@@ -5,15 +5,16 @@ const underTest = require('../src/commands/add-scheduled-event'),
 	fsUtil = require('../src/util/fs-util'),
 	fs = require('fs'),
 	path = require('path'),
-	aws = require('aws-sdk'),
+	{ CloudWatchEventsClient, DescribeRuleCommand, ListTargetsByRuleCommand } = require('@aws-sdk/client-cloudwatch-events'),
+	{ LambdaClient, GetFunctionConfigurationCommand } = require('@aws-sdk/client-lambda'),
 	awsRegion = require('./util/test-aws-region');
 describe('addScheduledEvent', () => {
 	'use strict';
 	let workingdir, testRunName, newObjects, config, events, lambda, eventConfig;
 	beforeEach(() => {
 		workingdir = tmppath();
-		events = new aws.CloudWatchEvents({region: awsRegion});
-		lambda = new aws.Lambda({region: awsRegion});
+		events = new CloudWatchEventsClient({region: awsRegion});
+		lambda = new LambdaClient({region: awsRegion});
 		testRunName = 'test' + Date.now();
 		newObjects = {workingdir: workingdir};
 		fs.mkdirSync(workingdir);
@@ -96,9 +97,9 @@ describe('addScheduledEvent', () => {
 			createLambda()
 			.then(() => underTest(config))
 			.then(() => {
-				return events.describeRule({
+				return events.send(new DescribeRuleCommand({
 					Name: newObjects.eventRule
-				}).promise();
+				}));
 			})
 			.then(eventConfig => {
 				expect(eventConfig.State).toEqual('ENABLED');
@@ -112,9 +113,9 @@ describe('addScheduledEvent', () => {
 			createLambda()
 			.then(() => underTest(config))
 			.then(() => {
-				return events.describeRule({
+				return events.send(new DescribeRuleCommand({
 					Name: newObjects.eventRule
-				}).promise();
+				}));
 			})
 			.then(eventConfig => {
 				expect(eventConfig.State).toEqual('ENABLED');
@@ -128,9 +129,9 @@ describe('addScheduledEvent', () => {
 			createLambda()
 			.then(() => underTest(config))
 			.then(() => {
-				return events.describeRule({
+				return events.send(new DescribeRuleCommand({
 					Name: newObjects.eventRule
-				}).promise();
+				}));
 			})
 			.then(eventConfig => {
 				expect(eventConfig.State).toEqual('ENABLED');
@@ -143,15 +144,15 @@ describe('addScheduledEvent', () => {
 
 			createLambda()
 			.then(() => {
-				return lambda.getFunctionConfiguration({
+				return lambda.send(new GetFunctionConfigurationCommand({
 					FunctionName: testRunName
-				}).promise();
+				}));
 			})
 			.then(lambdaResult => {
 				functionArn = lambdaResult.FunctionArn;
 			})
 			.then(() => underTest(config))
-			.then(() => events.listTargetsByRule({Rule: config.name}).promise())
+			.then(() => events.send(new ListTargetsByRuleCommand({Rule: config.name})))
 			.then(config => {
 				expect(config.Targets.length).toBe(1);
 				expect(config.Targets[0].Arn).toEqual(functionArn);
@@ -166,17 +167,17 @@ describe('addScheduledEvent', () => {
 
 			createLambda()
 			.then(() => {
-				return lambda.getFunctionConfiguration({
+				return lambda.send(new GetFunctionConfigurationCommand({
 					FunctionName: testRunName,
 					Qualifier: 'special'
-				}).promise();
+				}));
 			})
 			.then(lambdaResult => {
 				functionArn = lambdaResult.FunctionArn;
 				console.log(functionArn);
 			})
 			.then(() => underTest(config))
-			.then(() => events.listTargetsByRule({Rule: config.name}).promise())
+			.then(() => events.send(new ListTargetsByRuleCommand({Rule: config.name})))
 			.then(config => {
 				expect(config.Targets.length).toBe(1);
 				expect(config.Targets[0].Arn).toEqual(functionArn);

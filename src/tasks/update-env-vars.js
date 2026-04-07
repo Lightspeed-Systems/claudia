@@ -1,5 +1,6 @@
 const readEnvVarsFromOptions = require('../util/read-env-vars-from-options'),
-	mergeProperties = require('../util/merge-properties');
+	mergeProperties = require('../util/merge-properties'),
+	{ UpdateFunctionConfigurationCommand } = require('@aws-sdk/client-lambda');
 module.exports = function updateEnvVars(options, lambdaAPI, functionName, existingVars) {
 	'use strict';
 	const kmsKey = options['env-kms-key-arn'],
@@ -22,5 +23,5 @@ module.exports = function updateEnvVars(options, lambdaAPI, functionName, existi
 		return Promise.resolve();
 	}
 	configUpdate.FunctionName = functionName;
-	return lambdaAPI.updateFunctionConfiguration(configUpdate).promise();
+	return lambdaAPI.send(new UpdateFunctionConfigurationCommand(configUpdate));
 };

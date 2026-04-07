@@ -1,4 +1,6 @@
-const aws = require('aws-sdk'),
+const apiGwCommands = require('@aws-sdk/client-api-gateway'),
+	{ APIGatewayClient } = require('@aws-sdk/client-api-gateway'),
+	{ LambdaClient, GetFunctionConfigurationCommand } = require('@aws-sdk/client-lambda'),
 	loggingWrap = require('../util/logging-wrap'),
 	retriableWrap = require('../util/retriable-wrap'),
 	allowApiInvocation = require('./allow-api-invocation'),
@@ -9,12 +11,13 @@ module.exports = function registerAuthorizers(authorizerMap, apiId, ownerAccount
 	const logger = optionalLogger || new NullLogger(),
 		apiGateway = retriableWrap(
 			loggingWrap(
-				new aws.APIGateway({region: awsRegion}),
+				new APIGatewayClient({region: awsRegion}),
 				{log: logger.logApiCall, logName: 'apigateway'}
 			),
+			apiGwCommands,
 			() => logger.logApiCall('rate-limited by AWS, waiting before retry')
 		),
-		lambda = loggingWrap(new aws.Lambda({region: awsRegion}), {log: logger.logApiCall, logName: 'lambda'}),
+		lambda = loggingWrap(new LambdaClient({region: awsRegion}), {log: logger.logApiCall, logName: 'lambda'}),
 		removeAuthorizer = function (authConfig) {
 			return apiGateway.deleteAuthorizerPromise({
 				authorizerId: authConfig.id,
@@ -28,7 +31,7 @@ module.exports = function registerAuthorizers(authorizerMap, apiId, ownerAccount
 			if (authConfig.lambdaArn) {
 				return Promise.resolve(authConfig.lambdaArn);
 			} else if (authConfig.lambdaName) {
-				return lambda.getFunctionConfiguration({FunctionName: authConfig.lambdaName}).promise()
+				return lambda.send(new GetFunctionConfigurationCommand({FunctionName: authConfig.lambdaName}))
 				.then(lambdaConfig => {
 					let suffix = '';
 					if (authConfig.lambdaVersion === true) {

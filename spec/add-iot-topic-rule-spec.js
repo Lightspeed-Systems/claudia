@@ -5,26 +5,28 @@ const underTest = require('../src/commands/add-iot-topic-rule'),
 	fs = require('fs'),
 	fsUtil = require('../src/util/fs-util'),
 	path = require('path'),
-	aws = require('aws-sdk'),
+	{ LambdaClient, GetFunctionConfigurationCommand } = require('@aws-sdk/client-lambda'),
+	{ IoTClient, DescribeEndpointCommand, GetTopicRuleCommand } = require('@aws-sdk/client-iot'),
+	{ IoTDataPlaneClient, PublishCommand } = require('@aws-sdk/client-iot-data-plane'),
 	pollForLogEvents = require('./util/poll-for-log-events'),
 	awsRegion = require('./util/test-aws-region');
 describe('addIOTTopicRuleEventSource', () => {
 	'use strict';
 	let workingdir, testRunName, newObjects, config, lambda, iot;
 	const postToEndpoint = function (endpoint, topic, message) {
-			const iotdata = new aws.IotData({region: awsRegion, endpoint: endpoint});
-			return iotdata.publish({
+			const iotdata = new IoTDataPlaneClient({region: awsRegion, endpoint: endpoint});
+			return iotdata.send(new PublishCommand({
 				topic: topic,
 				payload: message
-			}).promise();
+			}));
 		},
 		postToDefaultEndpoint = function (topic, message) {
-			return iot.describeEndpoint().promise().then(data => postToEndpoint(data.endpointAddress, topic, message));
+			return iot.send(new DescribeEndpointCommand({})).then(data => postToEndpoint(data.endpointAddress, topic, message));
 		};
 	beforeEach(() => {
 		workingdir = tmppath();
-		lambda = new aws.Lambda({ region: awsRegion });
-		iot = new aws.Iot({region: awsRegion});
+		lambda = new LambdaClient({ region: awsRegion });
+		iot = new IoTClient({region: awsRegion});
 		testRunName = 'test' + Date.now();
 		newObjects = { workingdir: workingdir };
 		fs.mkdirSync(workingdir);
@@ -83,11 +85,11 @@ describe('addIOTTopicRuleEventSource', () => {
 		it('sets up privileges and rule notifications if no version given', done => {
 			let functionArn;
 			createLambda()
-			.then(() => lambda.getFunctionConfiguration({ FunctionName: testRunName }).promise())
+			.then(() => lambda.send(new GetFunctionConfigurationCommand({ FunctionName: testRunName })))
 			.then(lambdaResult => functionArn = lambdaResult.FunctionArn)
 			.then(() => underTest(config))
 			.then(result => newObjects.iotTopicRule = result.ruleName)
-			.then(ruleName => iot.getTopicRule({ruleName: ruleName}).promise())
+			.then(ruleName => iot.send(new GetTopicRuleCommand({ruleName: ruleName})))
 			.then(topicRule => {
 				expect(topicRule.rule.sql).toEqual('SELECT * FROM \'iot/+\'');
 				expect(topicRule.rule.awsIotSqlVersion).toEqual('2015-10-08');
@@ -114,11 +116,11 @@ describe('addIOTTopicRuleEventSource', () => {
 			config.description = 'test-rule-description';
 			config.sqlVersion = 'beta';
 			createLambda()
-			.then(() => lambda.getFunctionConfiguration({ FunctionName: testRunName }).promise())
+			.then(() => lambda.send(new GetFunctionConfigurationCommand({ FunctionName: testRunName })))
 			.then(lambdaResult => functionArn = lambdaResult.FunctionArn)
 			.then(() => underTest(config))
 			.then(result => newObjects.iotTopicRule = result.ruleName)
-			.then(ruleName => iot.getTopicRule({ruleName: ruleName}).promise())
+			.then(ruleName => iot.send(new GetTopicRuleCommand({ruleName: ruleName})))
 			.then(topicRule => {
 				expect(topicRule.rule.ruleName).toEqual('test_rule_' + testRunName.replace(/-/g, ''));
 				expect(topicRule.rule.sql).toEqual('SELECT * FROM \'iot/+\'');
@@ -136,11 +138,11 @@ describe('addIOTTopicRuleEventSource', () => {
 			config.version = 'special';
 
 			createLambda()
-			.then(() => lambda.getFunctionConfiguration({ FunctionName: testRunName, Qualifier: 'special' }).promise())
+			.then(() => lambda.send(new GetFunctionConfigurationCommand({ FunctionName: testRunName, Qualifier: 'special' })))
 			.then(lambdaResult => functionArn = lambdaResult.FunctionArn)
 			.then(() => underTest(config))
 			.then(result => newObjects.iotTopicRule = result.ruleName)
-			.then(ruleName => iot.getTopicRule({ruleName: ruleName}).promise())
+			.then(ruleName => iot.send(new GetTopicRuleCommand({ruleName: ruleName})))
 			.then(topicRule => {
 				expect(topicRule.rule.sql).toEqual('SELECT * FROM \'iot/+\'');
 				expect(topicRule.rule.awsIotSqlVersion).toEqual('2015-10-08');

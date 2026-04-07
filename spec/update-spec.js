@@ -9,7 +9,10 @@ const underTest = require('../src/commands/update'),
 	fsPromise = require('../src/util/fs-promise'),
 	fsUtil = require('../src/util/fs-util'),
 	path = require('path'),
-	aws = require('aws-sdk'),
+	{ IAMClient, CreateRoleCommand, ListRolePoliciesCommand, GetRolePolicyCommand, PutRolePolicyCommand } = require('@aws-sdk/client-iam'),
+	{ LambdaClient, GetFunctionConfigurationCommand, InvokeCommand, ListVersionsByFunctionCommand, GetAliasCommand, UpdateFunctionConfigurationCommand, PublishLayerVersionCommand, DeleteLayerVersionCommand } = require('@aws-sdk/client-lambda'),
+	{ S3Client, CreateBucketCommand, HeadObjectCommand, PutBucketEncryptionCommand, PutBucketPolicyCommand } = require('@aws-sdk/client-s3'),
+	{ SNSClient, CreateTopicCommand } = require('@aws-sdk/client-sns'),
 	os = require('os'),
 	awsRegion = require('./util/test-aws-region'),
 	snsPublishPolicy = require('../src/policies/sns-publish-policy'),
@@ -26,13 +29,13 @@ describe('update', () => {
 			return callApi(newObjects.restApi, awsRegion, url, options);
 		},
 		getLambdaConfiguration = function (qualifier) {
-			return lambda.getFunctionConfiguration({ FunctionName: testRunName, Qualifier: qualifier }).promise();
+			return lambda.send(new GetFunctionConfigurationCommand({ FunctionName: testRunName, Qualifier: qualifier }));
 		};
 	beforeAll(() => {
-		lambda = new aws.Lambda({region: awsRegion});
-		s3 = new aws.S3({region: awsRegion, signatureVersion: 'v4'});
-		iam = new aws.IAM({ region: awsRegion });
-		sns = new aws.SNS({region: awsRegion});
+		lambda = new LambdaClient({region: awsRegion});
+		s3 = new S3Client({region: awsRegion});
+		iam = new IAMClient({ region: awsRegion });
+		sns = new SNSClient({region: awsRegion});
 	});
 	beforeEach(() => {
 		workingdir = tmppath();
@@ -122,7 +125,7 @@ describe('update', () => {
 			}).then(() => {
 				return underTest({source: workingdir});
 			}).then(done.fail, reason => {
-				expect(reason.code).toEqual('ResourceNotFoundException');
+				expect(reason.name).toEqual('ResourceNotFoundException');
 			}).then(done);
 		});
 		it('validates the package before updating the lambda', done => {
@@ -131,7 +134,7 @@ describe('update', () => {
 			.then(done.fail, reason => {
 				expect(reason).toEqual('cannot require ./main after clean installation. Check your dependencies.');
 			}).then(() => {
-				return lambda.listVersionsByFunction({FunctionName: testRunName}).promise();
+				return lambda.send(new ListVersionsByFunctionCommand({FunctionName: testRunName}));
 			}).then(result => {
 				expect(result.Versions.length).toEqual(2);
 			}).then(done, done.fail);
@@ -140,7 +143,7 @@ describe('update', () => {
 			underTest({source: workingdir}).then(lambdaFunc => {
 				expect(new RegExp('^arn:aws:lambda:' + awsRegion + ':[0-9]+:function:' + testRunName + ':2$').test(lambdaFunc.FunctionArn)).toBeTruthy();
 			}).then(() => {
-				return lambda.listVersionsByFunction({FunctionName: testRunName}).promise();
+				return lambda.send(new ListVersionsByFunctionCommand({FunctionName: testRunName}));
 			}).then(result => {
 				expect(result.Versions.length).toEqual(3);
 				expect(result.Versions[0].Version).toEqual('$LATEST');
@@ -150,7 +153,7 @@ describe('update', () => {
 		});
 		it('updates the lambda with a new version', done => {
 			underTest({source: workingdir}).then(() => {
-				return lambda.invoke({FunctionName: testRunName, Payload: JSON.stringify({message: 'aloha'})}).promise();
+				return lambda.send(new InvokeCommand({FunctionName: testRunName, Payload: JSON.stringify({message: 'aloha'})}));
 			}).then(lambdaResult => {
 				expect(lambdaResult.StatusCode).toEqual(200);
 				expect(lambdaResult.Payload).toEqual('{"message":"aloha"}');
@@ -171,7 +174,7 @@ describe('update', () => {
 			fsUtil.copy(path.join(workingdir, 'local_modules'),  path.join(workingdir, 'node_modules'), true);
 
 			underTest({source: workingdir, 'use-local-dependencies': true}).then(() => {
-				return lambda.invoke({FunctionName: testRunName, Payload: JSON.stringify({message: 'aloha'})}).promise();
+				return lambda.send(new InvokeCommand({FunctionName: testRunName, Payload: JSON.stringify({message: 'aloha'})}));
 			}).then(lambdaResult => {
 				expect(lambdaResult.StatusCode).toEqual(200);
 				expect(lambdaResult.Payload).toEqual('"hello local"');
@@ -180,7 +183,7 @@ describe('update', () => {
 		it('removes optional dependencies after validation if requested', done => {
 			fsUtil.copy(path.join(__dirname, '/test-projects/optional-dependencies'), workingdir, true);
 			underTest({source: workingdir, 'optional-dependencies': false}).then(() => {
-				return lambda.invoke({FunctionName: testRunName}).promise();
+				return lambda.send(new InvokeCommand({FunctionName: testRunName}));
 			}).then(lambdaResult => {
 				expect(lambdaResult.StatusCode).toEqual(200);
 				expect(JSON.parse(lambdaResult.Payload).modules.filter(t => !t.startsWith('.'))).toEqual(['huh']);
@@ -190,7 +193,7 @@ describe('update', () => {
 			fsUtil.copy(path.join(__dirname, 'test-projects/relative-dependencies'), workingdir, true);
 			fsUtil.copy(path.join(workingdir, 'claudia.json'), path.join(workingdir, 'lambda'));
 			underTest({source: path.join(workingdir, 'lambda')}).then(() => {
-				return lambda.invoke({FunctionName: testRunName}).promise();
+				return lambda.send(new InvokeCommand({FunctionName: testRunName}));
 			}).then(lambdaResult => {
 				expect(lambdaResult.StatusCode).toEqual(200);
 				expect(lambdaResult.Payload).toEqual('"hello relative"');
@@ -201,9 +204,9 @@ describe('update', () => {
 			const logger = new ArrayLogger(),
 				bucketName = testRunName + '-bucket';
 			let archivePath;
-			s3.createBucket({
+			s3.send(new CreateBucketCommand({
 				Bucket: bucketName
-			}).promise().then(() => {
+			})).then(() => {
 				newObjects.s3bucket = bucketName;
 			}).then(() => {
 				return underTest({keep: true, 'use-s3-bucket': bucketName, source: workingdir}, logger);
@@ -211,16 +214,16 @@ describe('update', () => {
 				const expectedKey = path.basename(result.archive);
 				archivePath = result.archive;
 				expect(result.s3key).toEqual(expectedKey);
-				return s3.headObject({
+				return s3.send(new HeadObjectCommand({
 					Bucket: bucketName,
 					Key: expectedKey
-				}).promise();
+				}));
 			}).then(fileResult => {
 				expect(parseInt(fileResult.ContentLength)).toEqual(fs.statSync(archivePath).size);
 			}).then(() => {
 				expect(logger.getApiCallLogForService('s3', true)).toEqual(['s3.upload', 's3.getSignatureVersion']);
 			}).then(() => {
-				return lambda.invoke({FunctionName: testRunName, Payload: JSON.stringify({message: 'aloha'})}).promise();
+				return lambda.send(new InvokeCommand({FunctionName: testRunName, Payload: JSON.stringify({message: 'aloha'})}));
 			}).then(lambdaResult => {
 				expect(lambdaResult.StatusCode).toEqual(200);
 				expect(lambdaResult.Payload).toEqual('{"message":"aloha"}');
@@ -232,12 +235,12 @@ describe('update', () => {
 				bucketName = testRunName + '-bucket',
 				serverSideEncryption = 'AES256';
 			let archivePath;
-			s3.createBucket({
+			s3.send(new CreateBucketCommand({
 				Bucket: bucketName
-			}).promise().then(() => {
+			})).then(() => {
 				newObjects.s3bucket = bucketName;
 			}).then(() => {
-				return s3.putBucketEncryption({
+				return s3.send(new PutBucketEncryptionCommand({
 					Bucket: bucketName,
 					ServerSideEncryptionConfiguration: {
 						Rules: [
@@ -248,9 +251,9 @@ describe('update', () => {
 							}
 						]
 					}
-				}).promise();
+				}));
 			}).then(() => {
-				return s3.putBucketPolicy({
+				return s3.send(new PutBucketPolicyCommand({
 					Bucket: bucketName,
 					Policy: `{
 						"Version": "2012-10-17",
@@ -269,23 +272,23 @@ describe('update', () => {
 							}
 						]
 					}`
-				}).promise();
+				}));
 			}).then(() => {
 				return underTest({keep: true, 'use-s3-bucket': bucketName, 's3-sse': serverSideEncryption, source: workingdir}, logger);
 			}).then(result => {
 				const expectedKey = path.basename(result.archive);
 				archivePath = result.archive;
 				expect(result.s3key).toEqual(expectedKey);
-				return s3.headObject({
+				return s3.send(new HeadObjectCommand({
 					Bucket: bucketName,
 					Key: expectedKey
-				}).promise();
+				}));
 			}).then(fileResult => {
 				expect(parseInt(fileResult.ContentLength)).toEqual(fs.statSync(archivePath).size);
 			}).then(() => {
 				expect(logger.getApiCallLogForService('s3', true)).toEqual(['s3.upload', 's3.getSignatureVersion']);
 			}).then(() => {
-				return lambda.invoke({FunctionName: testRunName, Payload: JSON.stringify({message: 'aloha'})}).promise();
+				return lambda.send(new InvokeCommand({FunctionName: testRunName, Payload: JSON.stringify({message: 'aloha'})}));
 			}).then(lambdaResult => {
 				expect(lambdaResult.StatusCode).toEqual(200);
 				expect(lambdaResult.Payload).toEqual('{"message":"aloha"}');
@@ -297,9 +300,9 @@ describe('update', () => {
 				bucketName = `${testRunName}-bucket`,
 				keyName = `${testRunName}-key`;
 			let archivePath;
-			s3.createBucket({
+			s3.send(new CreateBucketCommand({
 				Bucket: bucketName
-			}).promise().then(() => {
+			})).then(() => {
 				newObjects.s3Bucket = bucketName;
 				newObjects.s3Key = keyName;
 			}).then(() => {
@@ -308,16 +311,16 @@ describe('update', () => {
 				const expectedKey = keyName;
 				archivePath = result.archive;
 				expect(result.s3key).toEqual(expectedKey);
-				return s3.headObject({
+				return s3.send(new HeadObjectCommand({
 					Bucket: bucketName,
 					Key: expectedKey
-				}).promise();
+				}));
 			}).then(fileResult => {
 				expect(parseInt(fileResult.ContentLength)).toEqual(fs.statSync(archivePath).size);
 			}).then(() => {
 				expect(logger.getApiCallLogForService('s3', true)).toEqual(['s3.upload', 's3.getSignatureVersion']);
 			}).then(() => {
-				return lambda.invoke({FunctionName: testRunName, Payload: JSON.stringify({message: 'aloha'})}).promise();
+				return lambda.send(new InvokeCommand({FunctionName: testRunName, Payload: JSON.stringify({message: 'aloha'})}));
 			}).then(lambdaResult => {
 				expect(lambdaResult.StatusCode).toEqual(200);
 				expect(lambdaResult.Payload).toEqual('{"message":"aloha"}');
@@ -326,7 +329,7 @@ describe('update', () => {
 
 		it('adds the version alias if supplied', done => {
 			underTest({source: workingdir, version: 'great'}).then(() => {
-				return lambda.getAlias({FunctionName: testRunName, Name: 'great'}).promise();
+				return lambda.send(new GetAliasCommand({FunctionName: testRunName, Name: 'great'}));
 			}).then(result => {
 				expect(result.FunctionVersion).toEqual('2');
 			}).then(done, done.fail);
@@ -337,7 +340,7 @@ describe('update', () => {
 			underTest().then(lambdaFunc => {
 				expect(new RegExp('^arn:aws:lambda:' + awsRegion + ':[0-9]+:function:' + testRunName + ':2$').test(lambdaFunc.FunctionArn)).toBeTruthy();
 				expect(lambdaFunc.FunctionName).toEqual(testRunName);
-				return lambda.invoke({FunctionName: testRunName, Payload: JSON.stringify({message: 'aloha'})}).promise();
+				return lambda.send(new InvokeCommand({FunctionName: testRunName, Payload: JSON.stringify({message: 'aloha'})}));
 			}).then(done, done.fail);
 		});
 	});
@@ -395,9 +398,9 @@ describe('update', () => {
 			}).then(() => {
 				return underTest({source: updateddir});
 			}).then(done.fail, reason => {
-				expect(reason.code).toEqual('NotFoundException');
+				expect(reason.name).toEqual('NotFoundException');
 			}).then(() => {
-				return lambda.listVersionsByFunction({FunctionName: testRunName}).promise();
+				return lambda.send(new ListVersionsByFunctionCommand({FunctionName: testRunName}));
 			}).then(result => {
 				expect(result.Versions.length).toEqual(2);
 				expect(result.Versions[0].Version).toEqual('$LATEST');
@@ -409,7 +412,7 @@ describe('update', () => {
 			underTest({source: updateddir}).then(done.fail, reason => {
 				expect(reason).toEqual('cannot require ./main after clean installation. Check your dependencies.');
 			}).then(() => {
-				return lambda.listVersionsByFunction({FunctionName: testRunName}).promise();
+				return lambda.send(new ListVersionsByFunctionCommand({FunctionName: testRunName}));
 			}).then(result => {
 				expect(result.Versions.length).toEqual(2);
 				expect(result.Versions[0].Version).toEqual('$LATEST');
@@ -434,10 +437,10 @@ describe('update', () => {
 			}).then(done, done.fail);
 		});
 		it('upgrades the function handler from 1.x', done => {
-			lambda.updateFunctionConfiguration({
+			lambda.send(new UpdateFunctionConfigurationCommand({
 				FunctionName: testRunName,
 				Handler: 'main.router'
-			}).promise().then(() => {
+			})).then(() => {
 				return underTest({source: updateddir});
 			}).then(result => {
 				expect(result.url).toEqual('https://' + newObjects.restApi + '.execute-api.' + awsRegion + '.amazonaws.com/latest');
@@ -810,11 +813,11 @@ describe('update', () => {
 					}
 				});
 			}).then(() => {
-				return lambda.invoke({
+				return lambda.send(new InvokeCommand({
 					FunctionName: testRunName,
 					Qualifier: 'new',
 					InvocationType: 'RequestResponse'
-				}).promise();
+				}));
 			}).then(result => {
 				const env = JSON.parse(result.Payload);
 				expect(Object.keys(env).filter(nonStandard).sort()).toEqual(['XPATH', 'YPATH']);
@@ -833,11 +836,11 @@ describe('update', () => {
 					}
 				});
 			}).then(() => {
-				return lambda.invoke({
+				return lambda.send(new InvokeCommand({
 					FunctionName: testRunName,
 					Qualifier: 'new',
 					InvocationType: 'RequestResponse'
-				}).promise();
+				}));
 			}).then(result => {
 				const env = JSON.parse(result.Payload);
 				expect(Object.keys(env).filter(nonStandard).sort()).toEqual(['XPATH', 'ZPATH']);
@@ -858,11 +861,11 @@ describe('update', () => {
 					}
 				});
 			}).then(() => {
-				return lambda.invoke({
+				return lambda.send(new InvokeCommand({
 					FunctionName: testRunName,
 					Qualifier: 'new',
 					InvocationType: 'RequestResponse'
-				}).promise();
+				}));
 			}).then(result => {
 				const env = JSON.parse(result.Payload);
 				expect(Object.keys(env).filter(nonStandard).sort()).toEqual(['XPATH', 'YPATH', 'ZPATH']);
@@ -885,11 +888,11 @@ describe('update', () => {
 					}
 				});
 			}).then(() => {
-				return lambda.invoke({
+				return lambda.send(new InvokeCommand({
 					FunctionName: testRunName,
 					Qualifier: 'new',
 					InvocationType: 'RequestResponse'
-				}).promise();
+				}));
 			}).then(result => {
 				const env = JSON.parse(result.Payload);
 				expect(Object.keys(env).filter(nonStandard).sort()).toEqual(['XPATH', 'ZPATH']);
@@ -912,11 +915,11 @@ describe('update', () => {
 					}
 				});
 			}).then(() => {
-				return lambda.invoke({
+				return lambda.send(new InvokeCommand({
 					FunctionName: testRunName,
 					Qualifier: 'new',
 					InvocationType: 'RequestResponse'
-				}).promise();
+				}));
 			}).then(result => {
 				const env = JSON.parse(result.Payload);
 				expect(Object.keys(env).filter(nonStandard).sort()).toEqual(['XPATH', 'YPATH', 'ZPATH']);
@@ -946,13 +949,13 @@ describe('update', () => {
 		let layers;
 		const createLayer = function (layerName, filePath) {
 				return lambdaCode(s3, filePath)
-					.then(contents => lambda.publishLayerVersion({LayerName: layerName, Content: contents}).promise());
+					.then(contents => lambda.send(new PublishLayerVersionCommand({LayerName: layerName, Content: contents})));
 			},
 			deleteLayer = function (layer) {
-				return lambda.deleteLayerVersion({
+				return lambda.send(new DeleteLayerVersionCommand({
 					LayerName: layer.LayerArn,
 					VersionNumber: layer.Version
-				}).promise();
+				}));
 			};
 		beforeAll((done) => {
 			const prefix = 'test' + Date.now();
@@ -1097,13 +1100,13 @@ describe('update', () => {
 		beforeAll(done => {
 			snsTopicName = `test-topic-${Date.now()}`;
 			secondSnsTopicName = `test-topic2-${Date.now()}`;
-			sns.createTopic({
+			sns.send(new CreateTopicCommand({
 				Name: snsTopicName
-			}).promise()
+			}))
 			.then(result => snsTopicArn = result.TopicArn)
-			.then(() => sns.createTopic({
+			.then(() => sns.send(new CreateTopicCommand({
 				Name: secondSnsTopicName
-			}).promise())
+			})))
 			.then(result => secondSnsTopicArn = result.TopicArn)
 			.then(done);
 		});
@@ -1130,7 +1133,7 @@ describe('update', () => {
 					})
 					.then(roleArn => {
 						const roleName = roleArn.split(':')[5].split('/')[1];
-						return iam.getRolePolicy({ PolicyName: 'dlq-publisher', RoleName: roleName }).promise();
+						return iam.send(new GetRolePolicyCommand({ PolicyName: 'dlq-publisher', RoleName: roleName }));
 					})
 					.then(policy => {
 						expect(JSON.parse(decodeURIComponent(policy.PolicyDocument)).Statement).toEqual(
@@ -1148,7 +1151,7 @@ describe('update', () => {
 					})
 					.then(roleArn => {
 						const roleName = roleArn.split(':')[5].split('/')[1];
-						return iam.getRolePolicy({ PolicyName: 'dlq-publisher', RoleName: roleName }).promise();
+						return iam.send(new GetRolePolicyCommand({ PolicyName: 'dlq-publisher', RoleName: roleName }));
 					})
 					.then(policy => {
 						expect(JSON.parse(decodeURIComponent(policy.PolicyDocument)).Statement).toEqual(
@@ -1166,7 +1169,7 @@ describe('update', () => {
 					})
 					.then(roleArn => {
 						const roleName = roleArn.split(':')[5].split('/')[1];
-						return iam.getRolePolicy({ PolicyName: 'dlq-publisher', RoleName: roleName }).promise();
+						return iam.send(new GetRolePolicyCommand({ PolicyName: 'dlq-publisher', RoleName: roleName }));
 					})
 					.then(policy => {
 						expect(JSON.parse(decodeURIComponent(policy.PolicyDocument)).Statement).toEqual(
@@ -1195,7 +1198,7 @@ describe('update', () => {
 					})
 					.then(roleArn => {
 						const roleName = roleArn.split(':')[5].split('/')[1];
-						return iam.listRolePolicies({ RoleName: roleName }).promise();
+						return iam.send(new ListRolePoliciesCommand({ RoleName: roleName }));
 					})
 					.then(result => {
 						expect(result.PolicyNames.find(t => t === 'dlq-publisher')).toBeFalsy();
@@ -1211,7 +1214,7 @@ describe('update', () => {
 					})
 					.then(roleArn => {
 						const roleName = roleArn.split(':')[5].split('/')[1];
-						return iam.getRolePolicy({ PolicyName: 'dlq-publisher', RoleName: roleName }).promise();
+						return iam.send(new GetRolePolicyCommand({ PolicyName: 'dlq-publisher', RoleName: roleName }));
 					})
 					.then(policy => {
 						expect(JSON.parse(decodeURIComponent(policy.PolicyDocument)).Statement).toEqual(
@@ -1229,7 +1232,7 @@ describe('update', () => {
 					})
 					.then(roleArn => {
 						const roleName = roleArn.split(':')[5].split('/')[1];
-						return iam.getRolePolicy({ PolicyName: 'dlq-publisher', RoleName: roleName }).promise();
+						return iam.send(new GetRolePolicyCommand({ PolicyName: 'dlq-publisher', RoleName: roleName }));
 					})
 					.then(policy => {
 						expect(JSON.parse(decodeURIComponent(policy.PolicyDocument)).Statement).toEqual(
@@ -1245,18 +1248,18 @@ describe('update', () => {
 			beforeEach(done => {
 				roleName = `${testRunName}-manual`;
 				fsUtil.copy('spec/test-projects/hello-world', workingdir, true);
-				return iam.createRole({
+				return iam.send(new CreateRoleCommand({
 					RoleName: roleName,
 					AssumeRolePolicyDocument: executorPolicy()
-				}).promise()
+				}))
 				.then(() => {
 					newObjects.lambdaRole = roleName;
 				})
-				.then(() => iam.putRolePolicy({
+				.then(() => iam.send(new PutRolePolicyCommand({
 					RoleName: roleName,
 					PolicyName: 'manual-dlq-publisher',
 					PolicyDocument: snsPublishPolicy(snsTopicArn)
-				}).promise())
+				})))
 				.then(() => create({name: testRunName, role: roleName, region: awsRegion, source: workingdir, handler: 'main.handler'}))
 				.then(result => {
 					newObjects.lambdaFunction = result.lambda && result.lambda.name;
@@ -1271,7 +1274,7 @@ describe('update', () => {
 					})
 					.then(roleArn => {
 						const roleName = roleArn.split(':')[5].split('/')[1];
-						return iam.listRolePolicies({ RoleName: roleName }).promise();
+						return iam.send(new ListRolePoliciesCommand({ RoleName: roleName }));
 					})
 					.then(result => {
 						expect(result.PolicyNames.find(t => t === 'dlq-publisher')).toBeFalsy();

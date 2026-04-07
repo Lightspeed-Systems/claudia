@@ -1,5 +1,5 @@
 const underTest = require('../src/util/destroy-role'),
-	aws = require('aws-sdk'),
+	{ IAMClient, CreateRoleCommand, PutRolePolicyCommand, GetRoleCommand, ListRolePoliciesCommand, AttachRolePolicyCommand } = require('@aws-sdk/client-iam'),
 	awsRegion = require('./util/test-aws-region'),
 	executorPolicy = require('../src/policies/lambda-executor-policy'),
 	loggingPolicy = require('../src/policies/logging-policy');
@@ -8,39 +8,39 @@ describe('destroyRole', () => {
 	let testRunName, iam;
 	beforeEach(done => {
 		testRunName = `test${Date.now()}-executor`;
-		iam = new aws.IAM({region: awsRegion});
+		iam = new IAMClient({region: awsRegion});
 
-		iam.createRole({
+		iam.send(new CreateRoleCommand({
 			RoleName: testRunName,
 			AssumeRolePolicyDocument: executorPolicy()
-		}).promise()
-		.then(() => iam.putRolePolicy({
+		}))
+		.then(() => iam.send(new PutRolePolicyCommand({
 			RoleName: testRunName,
 			PolicyName: 'log-writer',
 			PolicyDocument: loggingPolicy('aws')
-		}).promise())
+		})))
 		.then(done, done.fail);
 	});
 	it('destroys the role', done => {
 		underTest(iam, testRunName)
-		.then(() => iam.getRole({ RoleName: testRunName }).promise())
-		.catch(expectedException => expect(expectedException.code).toEqual('NoSuchEntity'))
+		.then(() => iam.send(new GetRoleCommand({ RoleName: testRunName })))
+		.catch(expectedException => expect(expectedException.name).toEqual('NoSuchEntityException'))
 		.then(done, done.fail);
 	});
 	it('destroys the policies', done => {
 		underTest(iam, testRunName)
-		.then(() => iam.listRolePolicies({ RoleName: testRunName }).promise())
+		.then(() => iam.send(new ListRolePoliciesCommand({ RoleName: testRunName })))
 		.catch(expectedException => expect(expectedException.message).toContain(testRunName))
 		.then(done, done.fail);
 	});
 	it('destroys a role with attached policies', done => {
-		iam.attachRolePolicy({
+		iam.send(new AttachRolePolicyCommand({
 			RoleName: testRunName,
 			PolicyArn: 'arn:aws:iam::aws:policy/service-role/AWSLambdaKinesisExecutionRole'
-		}).promise()
+		}))
 		.then(() => underTest(iam, testRunName))
-		.then(() => iam.getRole({ RoleName: testRunName }).promise())
-		.catch(expectedException => expect(expectedException.code).toEqual('NoSuchEntity'))
+		.then(() => iam.send(new GetRoleCommand({ RoleName: testRunName })))
+		.catch(expectedException => expect(expectedException.name).toEqual('NoSuchEntityException'))
 		.then(done, done.fail);
 	});
 });

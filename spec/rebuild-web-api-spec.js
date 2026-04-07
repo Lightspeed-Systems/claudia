@@ -5,7 +5,10 @@ const underTest = require('../src/tasks/rebuild-web-api'),
 	querystring = require('querystring'),
 	path = require('path'),
 	tmppath = require('../src/util/tmppath'),
-	aws = require('aws-sdk'),
+	{ IAMClient, GetUserCommand } = require('@aws-sdk/client-iam'),
+	{ LambdaClient, DeleteFunctionCommand } = require('@aws-sdk/client-lambda'),
+	{ APIGatewayClient } = require('@aws-sdk/client-api-gateway'),
+	apiGwCommands = require('@aws-sdk/client-api-gateway'),
 	fs = require('fs'),
 	callApi = require('../src/util/call-api'),
 	fsUtil = require('../src/util/fs-util'),
@@ -19,8 +22,8 @@ describe('rebuildWebApi', () => {
 	'use strict';
 	let workingdir, testRunName, newObjects, apiRouteConfig, apiId, stageName,
 		genericLambdaName, genericLambdaPath, ownerAccount, awsPartition;
-	const apiGateway = retriableWrap(new aws.APIGateway({region: awsRegion})),
-		lambda = new aws.Lambda({region: awsRegion}),
+	const apiGateway = retriableWrap(new APIGatewayClient({region: awsRegion}), apiGwCommands),
+		lambda = new LambdaClient({region: awsRegion}),
 		createGenericLambda = function (codePath, version) {
 			return Promise.resolve()
 			.then(() => {
@@ -509,10 +512,10 @@ describe('rebuildWebApi', () => {
 			}).then(done, done.fail);
 		});
 		it('sets custom credentials when invokeWithCredentials is a string', done => {
-			const iam = new aws.IAM({region: awsRegion});
+			const iam = new IAMClient({region: awsRegion});
 			let echoResourceId,
 				testCredentials;
-			iam.getUser().promise().then(data => {
+			iam.send(new GetUserCommand({})).then(data => {
 				testCredentials = data.User.Arn;
 				apiRouteConfig.routes.echo.POST = {
 					invokeWithCredentials: testCredentials
@@ -926,8 +929,8 @@ describe('rebuildWebApi', () => {
 			}).then(done, done.fail);
 		});
 		afterEach(done => {
-			const lambda = new aws.Lambda({region: awsRegion});
-			lambda.deleteFunction({FunctionName: authorizerLambdaName}).promise().then(done, done.fail);
+			const lambda = new LambdaClient({region: awsRegion});
+			lambda.send(new DeleteFunctionCommand({FunctionName: authorizerLambdaName})).then(done, done.fail);
 		});
 		it('assigns authorizers by name', done => {
 			const authorizerIds = {};
@@ -1104,7 +1107,7 @@ describe('rebuildWebApi', () => {
 						expect(r).toBeUndefined();
 						done.fail('OPTIONS resource created');
 					}).catch(e => {
-						expect(e.code).toEqual('NotFoundException');
+						expect(e.name).toEqual('NotFoundException');
 					});
 				}).then(done, done.fail);
 			});

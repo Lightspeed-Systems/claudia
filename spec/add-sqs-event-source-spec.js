@@ -5,7 +5,8 @@ const underTest = require('../src/commands/add-sqs-event-source'),
 	fsUtil = require('../src/util/fs-util'),
 	fs = require('fs'),
 	path = require('path'),
-	aws = require('aws-sdk'),
+	{ LambdaClient, ListEventSourceMappingsCommand } = require('@aws-sdk/client-lambda'),
+	{ SQSClient, CreateQueueCommand, GetQueueAttributesCommand, SendMessageCommand } = require('@aws-sdk/client-sqs'),
 	genericQueue = require('./util/generic-queue'),
 	awsRegion = require('./util/test-aws-region');
 describe('addSQSEventSource', () => {
@@ -13,7 +14,7 @@ describe('addSQSEventSource', () => {
 	let workingdir, testRunName, newObjects, config, lambda, sqs;
 	beforeEach(() => {
 		workingdir = tmppath();
-		lambda = new aws.Lambda({ region: awsRegion });
+		lambda = new LambdaClient({ region: awsRegion });
 		testRunName = 'test' + Date.now();
 		newObjects = { workingdir: workingdir };
 		fs.mkdirSync(workingdir);
@@ -22,7 +23,7 @@ describe('addSQSEventSource', () => {
 			source: workingdir,
 			'batch-size': 1
 		};
-		sqs = new aws.SQS({region: awsRegion});
+		sqs = new SQSClient({region: awsRegion});
 	});
 	afterEach(done => {
 		destroyObjects(newObjects).then(done, done.fail);
@@ -62,17 +63,17 @@ describe('addSQSEventSource', () => {
 	describe('when params are valid', () => {
 		let createConfig,  queueUrl, queueArn;
 		beforeEach((done) => {
-			sqs.createQueue({
+			sqs.send(new CreateQueueCommand({
 				QueueName: testRunName
-			}).promise()
+			}))
 			.then(result => {
 				queueUrl = result.QueueUrl;
 				newObjects.sqsQueueUrl = queueUrl;
 			})
-			.then(() => sqs.getQueueAttributes({
+			.then(() => sqs.send(new GetQueueAttributesCommand({
 				QueueUrl: queueUrl,
 				AttributeNames: ['QueueArn']
-			}).promise())
+			})))
 			.then(result => {
 				queueArn = result.Attributes.QueueArn;
 			})
@@ -86,10 +87,10 @@ describe('addSQSEventSource', () => {
 				});
 			},
 			sendMessage = function (info) {
-				return sqs.sendMessage({
+				return sqs.send(new SendMessageCommand({
 					QueueUrl: queueUrl,
 					MessageBody: info || 'abcd'
-				}).promise();
+				}));
 			};
 		describe('event source wiring', () => {
 			beforeEach(() => {
@@ -108,7 +109,7 @@ describe('addSQSEventSource', () => {
 			it('sets up privileges if role is given with name', done => {
 				createLambda()
 					.then(() => underTest(config))
-					.then(() => lambda.listEventSourceMappings({FunctionName: testRunName}).promise())
+					.then(() => lambda.send(new ListEventSourceMappingsCommand({FunctionName: testRunName})))
 					.then(config => {
 						expect(config.EventSourceMappings.length).toBe(1);
 						expect(config.EventSourceMappings[0].FunctionArn).toMatch(new RegExp(testRunName + '$'));
@@ -120,7 +121,7 @@ describe('addSQSEventSource', () => {
 				config.queue = queueArn;
 				createLambda()
 					.then(() => underTest(config))
-					.then(() => lambda.listEventSourceMappings({FunctionName: testRunName}).promise())
+					.then(() => lambda.send(new ListEventSourceMappingsCommand({FunctionName: testRunName})))
 					.then(config => {
 						expect(config.EventSourceMappings[0].EventSourceArn).toEqual(queueArn);
 					})
@@ -131,7 +132,7 @@ describe('addSQSEventSource', () => {
 				config.version = 'special';
 				createLambda()
 					.then(() => underTest(config))
-					.then(() => lambda.listEventSourceMappings({FunctionName: `${testRunName}:special`}).promise())
+					.then(() => lambda.send(new ListEventSourceMappingsCommand({FunctionName: `${testRunName}:special`})))
 					.then(config => {
 						expect(config.EventSourceMappings.length).toBe(1);
 						expect(config.EventSourceMappings[0].FunctionArn).toMatch(new RegExp(testRunName + ':special$'));
@@ -143,7 +144,7 @@ describe('addSQSEventSource', () => {
 				config['batch-size'] = 5;
 				createLambda()
 					.then(() => underTest(config))
-					.then(() => lambda.listEventSourceMappings({FunctionName: testRunName}).promise())
+					.then(() => lambda.send(new ListEventSourceMappingsCommand({FunctionName: testRunName})))
 					.then(config => {
 						expect(config.EventSourceMappings.length).toBe(1);
 						expect(config.EventSourceMappings[0].BatchSize).toEqual(5);

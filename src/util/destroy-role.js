@@ -1,20 +1,21 @@
+const { DeleteRolePolicyCommand, DetachRolePolicyCommand, ListRolePoliciesCommand, ListAttachedRolePoliciesCommand, DeleteRoleCommand } = require('@aws-sdk/client-iam');
 module.exports = function destroyRole(iam, roleName) {
 	'use strict';
 	const deleteSinglePolicy = function (policyName) {
-			return iam.deleteRolePolicy({
+			return iam.send(new DeleteRolePolicyCommand({
 				PolicyName: policyName,
 				RoleName: roleName
-			}).promise();
+			}));
 		},
 		detachSinglePolicy = function (policy) {
-			return iam.detachRolePolicy({
+			return iam.send(new DetachRolePolicyCommand({
 				PolicyArn: policy.PolicyArn,
 				RoleName: roleName
-			}).promise();
+			}));
 		};
-	return iam.listRolePolicies({RoleName: roleName}).promise()
+	return iam.send(new ListRolePoliciesCommand({RoleName: roleName}))
 	.then(result => Promise.all(result.PolicyNames.map(deleteSinglePolicy)))
-	.then(() => iam.listAttachedRolePolicies({RoleName: roleName}).promise())
+	.then(() => iam.send(new ListAttachedRolePoliciesCommand({RoleName: roleName})))
 	.then(result => Promise.all(result.AttachedPolicies.map(detachSinglePolicy)))
-	.then(() => iam.deleteRole({RoleName: roleName}).promise());
+	.then(() => iam.send(new DeleteRoleCommand({RoleName: roleName})));
 };

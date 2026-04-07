@@ -1,4 +1,4 @@
-const aws = require('aws-sdk'),
+const { LambdaClient } = require('@aws-sdk/client-lambda'),
 	loadConfig = require('../util/loadconfig'),
 	listVersions = require('../tasks/list-versions');
 module.exports = async function list(options /*, optionalLogger*/) {
@@ -21,7 +21,7 @@ module.exports = async function list(options /*, optionalLogger*/) {
 			);
 		},
 		config = await loadConfig(options, {lambda: {name: true, region: true}}),
-		lambda = new aws.Lambda({region: config.lambda.region}),
+		lambda = new LambdaClient({region: config.lambda.region}),
 		versionList = await listVersions(config.lambda.name, lambda, options.version);
 
 	if (!formatter) {

@@ -1,7 +1,7 @@
-const aws = require('aws-sdk');
+const { LambdaClient, GetPolicyCommand, AddPermissionCommand } = require('@aws-sdk/client-lambda');
 module.exports = function allowApiInvocation(functionName, functionVersion, restApiId, ownerId, awsPartition, awsRegion, path) {
 	'use strict';
-	const lambda = new aws.Lambda({region: awsRegion}),
+	const lambda = new LambdaClient({region: awsRegion}),
 		activePath = path || '*/*/*',
 		policy = {
 			Action: 'lambda:InvokeFunction',
@@ -18,19 +18,19 @@ module.exports = function allowApiInvocation(functionName, functionVersion, rest
 				statement.Condition.ArnLike['AWS:SourceArn'] === policy.SourceArn &&
 				statement.Effect === 'Allow';
 		};
-	return lambda.getPolicy({
+	return lambda.send(new GetPolicyCommand({
 		FunctionName: functionName,
 		Qualifier: functionVersion
-	}).promise()
+	}))
 	.then(policyResponse => policyResponse && policyResponse.Policy && JSON.parse(policyResponse.Policy))
 	.then(currentPolicy => {
 		const statements = (currentPolicy && currentPolicy.Statement) || [];
 		if (!statements.find(matchesPolicy)) {
-			return lambda.addPermission(policy).promise();
+			return lambda.send(new AddPermissionCommand(policy));
 		}
 	}, e => {
-		if (e && e.code === 'ResourceNotFoundException') {
-			return lambda.addPermission(policy).promise();
+		if (e && e.name === 'ResourceNotFoundException') {
+			return lambda.send(new AddPermissionCommand(policy));
 		} else {
 			return Promise.reject(e);
 		}

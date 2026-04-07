@@ -6,7 +6,10 @@ const underTest = require('../src/tasks/register-authorizers'),
 	fs = require('fs'),
 	tmppath = require('../src/util/tmppath'),
 	fsUtil = require('../src/util/fs-util'),
-	aws = require('aws-sdk'),
+	{ LambdaClient, GetFunctionConfigurationCommand, DeleteFunctionCommand, GetPolicyCommand } = require('@aws-sdk/client-lambda'),
+	{ APIGatewayClient } = require('@aws-sdk/client-api-gateway'),
+	apiGwCommands = require('@aws-sdk/client-api-gateway'),
+	{ IAMClient, GetRoleCommand } = require('@aws-sdk/client-iam'),
 	retriableWrap = require('../src/util/retriable-wrap'),
 	cognitoUserPool = require('./util/cognito-user-pool'),
 	awsRegion = require('./util/test-aws-region');
@@ -14,9 +17,9 @@ const underTest = require('../src/tasks/register-authorizers'),
 describe('registerAuthorizers', () => {
 	'use strict';
 	let authorizerLambdaName, workingdir, testRunName, newObjects, apiId, authorizerArn, ownerId, awsPartition;
-	const apiGateway = retriableWrap(new aws.APIGateway({ region: awsRegion })),
-		lambda = new aws.Lambda({ region: awsRegion }),
-		iam = new aws.IAM({ region: awsRegion }),
+	const apiGateway = retriableWrap(new APIGatewayClient({ region: awsRegion }), apiGwCommands),
+		lambda = new LambdaClient({ region: awsRegion }),
+		iam = new IAMClient({ region: awsRegion }),
 		checkAuthUri = function (uri) {
 			expect(uri).toMatch(/^arn:aws:apigateway:[a-z0-9-]+:lambda:path\/2015-03-31\/functions\/arn:aws:lambda:[a-z0-9-]+:[0-9]+:function:test[0-9]+auth\/invocations$/);
 			expect(uri.split(':')[11]).toEqual(testRunName + 'auth/invocations');
@@ -50,7 +53,7 @@ describe('registerAuthorizers', () => {
 		})
 		.then(result => {
 			authorizerLambdaName = result.lambda && result.lambda.name;
-			return lambda.getFunctionConfiguration({ FunctionName: authorizerLambdaName }).promise();
+			return lambda.send(new GetFunctionConfigurationCommand({ FunctionName: authorizerLambdaName }));
 		})
 		.then(lambdaConfig => {
 			authorizerArn = lambdaConfig.FunctionArn;
@@ -69,7 +72,7 @@ describe('registerAuthorizers', () => {
 		destroyObjects(newObjects)
 		.then(() => {
 			if (authorizerLambdaName) {
-				return lambda.deleteFunction({FunctionName: authorizerLambdaName}).promise();
+				return lambda.send(new DeleteFunctionCommand({FunctionName: authorizerLambdaName}));
 			}
 		})
 		.then(done, done.fail);
@@ -193,7 +196,7 @@ describe('registerAuthorizers', () => {
 	});
 	it('assigns authorizer credentials if supplied', done => {
 		let roleArn;
-		iam.getRole({ RoleName: genericTestRole.get() }).promise()
+		iam.send(new GetRoleCommand({ RoleName: genericTestRole.get() }))
 		.then(roleDetails => {
 			roleArn = roleDetails.Role.Arn;
 			expect(roleArn).toBeTruthy();
@@ -458,9 +461,9 @@ describe('registerAuthorizers', () => {
 		};
 		underTest(authorizerConfig, apiId, ownerId, awsPartition, awsRegion)
 		.then(() => {
-			return lambda.getPolicy({
+			return lambda.send(new GetPolicyCommand({
 				FunctionName: authorizerLambdaName
-			}).promise();
+			}));
 		})
 		.then(policyResponse => policyResponse && policyResponse.Policy && JSON.parse(policyResponse.Policy))
 		.then(currentPolicy => {
@@ -475,10 +478,10 @@ describe('registerAuthorizers', () => {
 		};
 		underTest(authorizerConfig, apiId, ownerId, awsPartition, awsRegion, 'development')
 		.then(() => {
-			return lambda.getPolicy({
+			return lambda.send(new GetPolicyCommand({
 				FunctionName: authorizerLambdaName,
 				Qualifier: 'original'
-			}).promise();
+			}));
 		})
 		.then(policyResponse => policyResponse && policyResponse.Policy && JSON.parse(policyResponse.Policy))
 		.then(currentPolicy => {
@@ -493,10 +496,10 @@ describe('registerAuthorizers', () => {
 		};
 		underTest(authorizerConfig, apiId, ownerId, awsPartition, awsRegion, 'original')
 		.then(() => {
-			return lambda.getPolicy({
+			return lambda.send(new GetPolicyCommand({
 				FunctionName: authorizerLambdaName,
 				Qualifier: 'original'
-			}).promise();
+			}));
 		})
 		.then(policyResponse => policyResponse && policyResponse.Policy && JSON.parse(policyResponse.Policy))
 		.then(currentPolicy => {
@@ -511,9 +514,9 @@ describe('registerAuthorizers', () => {
 		};
 		underTest(authorizerConfig, apiId, ownerId, awsPartition, awsRegion, 'original')
 		.then(() => {
-			return lambda.getPolicy({
+			return lambda.send(new GetPolicyCommand({
 				FunctionName: authorizerLambdaName
-			}).promise();
+			}));
 		})
 		.then(done.fail, err => expect(err.message).toEqual('The resource you requested does not exist.'))
 		.then(done);

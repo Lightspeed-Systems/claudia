@@ -1,4 +1,5 @@
-const aws = require('aws-sdk'),
+const { APIGatewayClient } = require('@aws-sdk/client-api-gateway'),
+	apiGwCommands = require('@aws-sdk/client-api-gateway'),
 	awsRegion = require('./util/test-aws-region'),
 	patchBinaryTypes = require('../src/tasks/patch-binary-types'),
 	retriableWrap = require('../src/util/retriable-wrap'),
@@ -6,7 +7,7 @@ const aws = require('aws-sdk'),
 describe('patchBinaryTypes', () => {
 	'use strict';
 	let testRunName, apiId;
-	const apiGateway = retriableWrap(new aws.APIGateway({region: awsRegion}));
+	const apiGateway = retriableWrap(new APIGatewayClient({region: awsRegion}), apiGwCommands);
 	beforeEach(() => {
 		testRunName = 'test' + Date.now();
 	});

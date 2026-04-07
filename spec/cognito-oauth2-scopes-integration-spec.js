@@ -8,7 +8,7 @@ const create = require('../src/commands/create'),
 	fsUtil = require('../src/util/fs-util'),
 	awsRegion = require('./util/test-aws-region'),
 	cognitoUserPool = require('./util/cognito-user-pool'),
-	AWS = require('aws-sdk'),
+	{ APIGatewayClient, GetResourcesCommand, GetMethodCommand } = require('@aws-sdk/client-api-gateway'),
 	{ inspect }  = require('util');
 
 describe('cognitoOauth2Scopes', () => {
@@ -71,8 +71,8 @@ describe('cognitoOauth2Scopes', () => {
 
 	describe('create wires up a cognito OAuth2 authorizer', () => {
 		it('creates resource methods with authorization scopes', done => {
-			const apiGateway = new AWS.APIGateway({ region: awsRegion });
-			apiGateway.getResources({ restApiId: apiId }).promise()
+			const apiGateway = new APIGatewayClient({ region: awsRegion });
+			apiGateway.send(new GetResourcesCommand({ restApiId: apiId }))
 			.then((resources) => {
 				const { id } = resources.items.find(resource => resource.pathPart === 'locked'),
 					params = {
@@ -80,7 +80,7 @@ describe('cognitoOauth2Scopes', () => {
 						resourceId: id,
 						restApiId: apiId
 					};
-				apiGateway.getMethod(params).promise()
+				apiGateway.send(new GetMethodCommand(params))
 				.then(response => expect(response.authorizationScopes).toEqual(['email', 'openid']))
 				.then(done, done.fail);
 			});

@@ -1,7 +1,7 @@
-const aws = require('aws-sdk'),
+const { IAMClient, CreateRoleCommand } = require('@aws-sdk/client-iam'),
 	destroyRole = require('../../src/util/destroy-role'),
 	awsRegion = require('./test-aws-region'),
-	iam = new aws.IAM({region: awsRegion}),
+	iam = new IAMClient({region: awsRegion}),
 	genericRoleName = 'test-generic-role-' + Date.now();
 
 module.exports.create = function create(name) {
@@ -14,10 +14,10 @@ module.exports.create = function create(name) {
 			'Action': 'sts:AssumeRole'
 		}]
 	});
-	return iam.createRole({
+	return iam.send(new CreateRoleCommand({
 		RoleName: name || genericRoleName,
 		AssumeRolePolicyDocument: lambdaRolePolicy
-	}).promise();
+	}));
 };
 module.exports.destroy = function () {
 	'use strict';

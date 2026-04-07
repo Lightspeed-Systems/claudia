@@ -6,8 +6,6 @@ const minimist = require('minimist'),
 	stsParams = require('../src/util/sts-params'),
 	ask = require('../src/util/ask'),
 	docTxt = require('../src/util/doc-txt'),
-	AWS = require('aws-sdk'),
-	HttpsProxyAgent = require('https-proxy-agent'),
 	readArgs = function () {
 		'use strict';
 		return minimist(process.argv.slice(2), {
@@ -52,20 +50,43 @@ const minimist = require('minimist'),
 			return;
 		}
 		if (args.profile) {
-			AWS.config.credentials = new AWS.SharedIniFileCredentials({profile: args.profile});
+			process.env.AWS_PROFILE = args.profile;
 		}
-		if (args['aws-client-timeout']) {
-			AWS.config.httpOptions = AWS.config.httpOptions || {};
-			AWS.config.httpOptions.timeout = args['aws-client-timeout'];
-		}
-
 		if (args.proxy) {
-			AWS.config.httpOptions = AWS.config.httpOptions || {};
-			AWS.config.httpOptions.agent = new HttpsProxyAgent(args.proxy);
+			process.env.HTTPS_PROXY = args.proxy;
 		}
 
 		if (stsConfig) {
-			AWS.config.credentials = new AWS.ChainableTemporaryCredentials(Object.assign(stsConfig, {masterCredentials: AWS.config.credentials}));
+			const { fromTemporaryCredentials } = require('@aws-sdk/credential-providers'),
+				credentialParams = {},
+				buildCredentialOptions = function () {
+					if (stsConfig.params.RoleArn) {
+						credentialParams.RoleArn = stsConfig.params.RoleArn;
+					}
+					if (stsConfig.params.SerialNumber) {
+						credentialParams.SerialNumber = stsConfig.params.SerialNumber;
+						if (stsConfig.params.DurationSeconds) {
+							credentialParams.DurationSeconds = stsConfig.params.DurationSeconds;
+						}
+					}
+					const credentialOptions = { params: credentialParams };
+					if (stsConfig.tokenCodeFn) {
+						credentialOptions.mfaCodeProvider = (serial) => {
+							return new Promise((resolve, reject) => {
+								stsConfig.tokenCodeFn(serial, (err, token) => {
+									if (err) {
+										reject(err);
+									} else {
+										resolve(token);
+									}
+								});
+							});
+						};
+					}
+					return credentialOptions;
+				};
+			process.env.AWS_SDK_LOAD_CONFIG = '1';
+			args._credentials = fromTemporaryCredentials(buildCredentialOptions());
 		}
 
 		commands[command](args, logger).then(result => {

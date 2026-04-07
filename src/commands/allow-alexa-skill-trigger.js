@@ -1,14 +1,14 @@
 const loadConfig = require('../util/loadconfig'),
-	aws = require('aws-sdk');
+	{ LambdaClient, GetFunctionConfigurationCommand, AddPermissionCommand } = require('@aws-sdk/client-lambda');
 
 module.exports = function allowAlexaSkillTrigger(options) {
 	'use strict';
 	let lambdaConfig,
 		lambda;
 	const initServices = function () {
-			lambda = new aws.Lambda({region: lambdaConfig.region});
+			lambda = new LambdaClient({region: lambdaConfig.region});
 		},
-		getLambda = () => lambda.getFunctionConfiguration({FunctionName: lambdaConfig.name, Qualifier: options.version}).promise(),
+		getLambda = () => lambda.send(new GetFunctionConfigurationCommand({FunctionName: lambdaConfig.name, Qualifier: options.version})),
 		readConfig = function () {
 			return loadConfig(options, {lambda: {name: true, region: true}})
 				.then(config => {
@@ -19,13 +19,13 @@ module.exports = function allowAlexaSkillTrigger(options) {
 				.then(result => result.Version);
 		},
 		addInvokePermission = function (version) {
-			return lambda.addPermission({
+			return lambda.send(new AddPermissionCommand({
 				Action: 'lambda:InvokeFunction',
 				FunctionName: lambdaConfig.name,
 				Principal: 'alexa-appkit.amazon.com',
 				Qualifier: options.version || version,
 				StatementId: `Alexa-${Date.now()}`
-			}).promise();
+			}));
 		};
 	return readConfig()
 		.then(addInvokePermission)

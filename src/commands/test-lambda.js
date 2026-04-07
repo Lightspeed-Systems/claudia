@@ -1,4 +1,4 @@
-const aws = require('aws-sdk'),
+const { LambdaClient, InvokeCommand } = require('@aws-sdk/client-lambda'),
 	loadConfig = require('../util/loadconfig'),
 	fsPromise = require('../util/fs-promise');
 module.exports = function testLambda(options) {
@@ -18,8 +18,8 @@ module.exports = function testLambda(options) {
 	})
 	.then(getPayload)
 	.then(payload => {
-		const lambda = new aws.Lambda({region: lambdaConfig.region});
-		return lambda.invoke({FunctionName: lambdaConfig.name, Payload: payload, Qualifier: options.version}).promise();
+		const lambda = new LambdaClient({region: lambdaConfig.region});
+		return lambda.send(new InvokeCommand({FunctionName: lambdaConfig.name, Payload: payload, Qualifier: options.version}));
 	});
 };
 module.exports.doc = {

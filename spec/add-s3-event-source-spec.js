@@ -7,12 +7,13 @@ const underTest = require('../src/commands/add-s3-event-source'),
 	fs = require('fs'),
 	path = require('path'),
 	retry = require('oh-no-i-insist'),
-	aws = require('aws-sdk'),
+	{ S3Client, GetBucketNotificationConfigurationCommand, CreateBucketCommand, PutObjectCommand } = require('@aws-sdk/client-s3'),
+	{ waitUntilObjectNotExists } = require('@aws-sdk/client-s3'),
 	genericRole = require('./util/generic-role'),
 	awsRegion = require('./util/test-aws-region');
 describe('addS3EventSource', () => {
 	'use strict';
-	const s3 = new aws.S3({region: awsRegion});
+	const s3 = new S3Client({region: awsRegion});
 	describe('validation', () => {
 		let workingdir;
 		beforeEach(() => {
@@ -73,9 +74,9 @@ describe('addS3EventSource', () => {
 		const getBucketNotifications = function (expectedConfigs) {
 			const length = expectedConfigs || 1;
 			return retry(() => {
-				return s3.getBucketNotificationConfiguration({
+				return s3.send(new GetBucketNotificationConfigurationCommand({
 					Bucket: bucketName
-				}).promise()
+				}))
 					.then(config => {
 						if (config && config.LambdaFunctionConfigurations && config.LambdaFunctionConfigurations.length >= length) {
 							return config;
@@ -110,10 +111,10 @@ describe('addS3EventSource', () => {
 		beforeEach(done => {
 			newObjects = { };
 			bucketName = 'test' + Date.now() + '.bucket';
-			s3.createBucket({
+			s3.send(new CreateBucketCommand({
 				Bucket: bucketName,
 				ACL: 'private'
-			}).promise()
+			}))
 			.then(() => {
 				newObjects.s3Bucket = bucketName;
 			})
@@ -123,18 +124,18 @@ describe('addS3EventSource', () => {
 			underTest({source: workingdir, bucket: bucketName})
 			.then(() => getBucketNotifications())
 			.then(() => {
-				return s3.putObject({
+				return s3.send(new PutObjectCommand({
 					Bucket: bucketName,
 					Key: `${testRunName}.txt`,
 					Body: 'file contents',
 					ACL: 'private'
-				}).promise();
+				}));
 			})
 			.then(() => {
-				return s3.waitFor('objectNotExists', {
+				return waitUntilObjectNotExists({client: s3, maxWaitTime: 300}, {
 					Bucket: bucketName,
 					Key: `${testRunName}.txt`
-				}).promise();
+				});
 			})
 			.then(done, done.fail);
 		});
@@ -213,18 +214,18 @@ describe('addS3EventSource', () => {
 			underTest({ source: workingdir, bucket: bucketName, version: 'special' })
 			.then(() => getBucketNotifications())
 			.then(() => {
-				return s3.putObject({
+				return s3.send(new PutObjectCommand({
 					Bucket: bucketName,
 					Key: `${testRunName}.txt`,
 					Body: 'file contents',
 					ACL: 'private'
-				}).promise();
+				}));
 			})
 			.then(() => {
-				return s3.waitFor('objectNotExists', {
+				return waitUntilObjectNotExists({client: s3, maxWaitTime: 300}, {
 					Bucket: bucketName,
 					Key: `${testRunName}.txt`
-				}).promise();
+				});
 			})
 			.then(done, done.fail);
 		});
