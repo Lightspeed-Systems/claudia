@@ -221,7 +221,7 @@ describe('update', () => {
 			}).then(fileResult => {
 				expect(parseInt(fileResult.ContentLength)).toEqual(fs.statSync(archivePath).size);
 			}).then(() => {
-				expect(logger.getApiCallLogForService('s3', true)).toEqual(['s3.upload', 's3.getSignatureVersion']);
+				expect(logger.getApiCallLogForService('s3', true)).toEqual(['s3.PutObjectCommand']);
 			}).then(() => {
 				return lambda.send(new InvokeCommand({FunctionName: testRunName, Payload: JSON.stringify({message: 'aloha'})}));
 			}).then(lambdaResult => {
@@ -286,7 +286,7 @@ describe('update', () => {
 			}).then(fileResult => {
 				expect(parseInt(fileResult.ContentLength)).toEqual(fs.statSync(archivePath).size);
 			}).then(() => {
-				expect(logger.getApiCallLogForService('s3', true)).toEqual(['s3.upload', 's3.getSignatureVersion']);
+				expect(logger.getApiCallLogForService('s3', true)).toEqual(['s3.PutObjectCommand']);
 			}).then(() => {
 				return lambda.send(new InvokeCommand({FunctionName: testRunName, Payload: JSON.stringify({message: 'aloha'})}));
 			}).then(lambdaResult => {
@@ -318,7 +318,7 @@ describe('update', () => {
 			}).then(fileResult => {
 				expect(parseInt(fileResult.ContentLength)).toEqual(fs.statSync(archivePath).size);
 			}).then(() => {
-				expect(logger.getApiCallLogForService('s3', true)).toEqual(['s3.upload', 's3.getSignatureVersion']);
+				expect(logger.getApiCallLogForService('s3', true)).toEqual(['s3.PutObjectCommand']);
 			}).then(() => {
 				return lambda.send(new InvokeCommand({FunctionName: testRunName, Payload: JSON.stringify({message: 'aloha'})}));
 			}).then(lambdaResult => {

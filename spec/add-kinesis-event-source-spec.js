@@ -42,7 +42,6 @@ describe('addKinesisEventSource', () => {
 	});
 	afterAll((done) => {
 		console.log('deleting the kinesis stream');
-		done();
 		kinesis.send(new DeleteStreamCommand({
 			StreamName: streamName
 		}))

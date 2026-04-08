@@ -826,7 +826,7 @@ describe('create', () => {
 				}));
 			})
 			.then(fileResult => expect(parseInt(fileResult.ContentLength)).toEqual(fs.statSync(archivePath).size))
-			.then(() => expect(logger.getApiCallLogForService('s3', true)).toEqual(['s3.upload', 's3.getSignatureVersion']))
+			.then(() => expect(logger.getApiCallLogForService('s3', true)).toEqual(['s3.PutObjectCommand']))
 			.then(() => lambda.send(new InvokeCommand({ FunctionName: testRunName })))
 			.then(lambdaResult => {
 				expect(lambdaResult.StatusCode).toEqual(200);
@@ -895,7 +895,7 @@ describe('create', () => {
 				}));
 			})
 			.then(fileResult => expect(parseInt(fileResult.ContentLength)).toEqual(fs.statSync(archivePath).size))
-			.then(() => expect(logger.getApiCallLogForService('s3', true)).toEqual(['s3.upload', 's3.getSignatureVersion']))
+			.then(() => expect(logger.getApiCallLogForService('s3', true)).toEqual(['s3.PutObjectCommand']))
 			.then(() => lambda.send(new InvokeCommand({ FunctionName: testRunName })))
 			.then(lambdaResult => {
 				expect(lambdaResult.StatusCode).toEqual(200);
@@ -929,7 +929,7 @@ describe('create', () => {
 				}));
 			})
 			.then(fileResult => expect(parseInt(fileResult.ContentLength)).toEqual(fs.statSync(archivePath).size))
-			.then(() => expect(logger.getApiCallLogForService('s3', true)).toEqual(['s3.upload', 's3.getSignatureVersion']))
+			.then(() => expect(logger.getApiCallLogForService('s3', true)).toEqual(['s3.PutObjectCommand']))
 			.then(() => lambda.send(new InvokeCommand({ FunctionName: testRunName })))
 			.then(lambdaResult => {
 				expect(lambdaResult.StatusCode).toEqual(200);

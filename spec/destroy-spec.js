@@ -61,7 +61,7 @@ describe('destroy', () => {
 		it('destroys the roles for the lambda function', done => {
 			underTest({ source: workingdir })
 			.then(() => iam.send(new GetRoleCommand({ RoleName: newObjects.lambdaRole })))
-			.catch(expectedException => expect(expectedException.name).toEqual('NoSuchEntity'))
+			.catch(expectedException => expect(expectedException.name).toEqual('NoSuchEntityException'))
 			.then(done, done.fail);
 		});
 		it('destroys the policies for the lambda function', done => {
@@ -148,7 +148,7 @@ describe('destroy', () => {
 		it('destroys the roles for the lambda function', done => {
 			underTest({ source: workingdir })
 			.then(() => iam.send(new GetRoleCommand({ RoleName: newObjects.lambdaRole })))
-			.catch(expectedException => expect(expectedException.name).toEqual('NoSuchEntity'))
+			.catch(expectedException => expect(expectedException.name).toEqual('NoSuchEntityException'))
 			.then(done, done.fail);
 		});
 		it('destroys the policies for the lambda function', done => {
