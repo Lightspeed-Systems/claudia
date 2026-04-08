@@ -552,7 +552,7 @@ describe('update', () => {
 					'postinstallalias': 'development',
 					'postinstallapiid': newObjects.restApi,
 					'postinstallapiUrl': 'https://' + newObjects.restApi + '.execute-api.' + awsRegion + '.amazonaws.com/development',
-					'hasAWS': 'true',
+					'hasAWS': 'false',
 					'postinstallregion': awsRegion,
 					'postinstalloption': 'option-123',
 					'lambdaVersion': 'development'

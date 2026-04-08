@@ -1187,7 +1187,7 @@ describe('create', () => {
 					'postinstallapiid': apiId,
 					'postinstallregion': awsRegion,
 					'postinstallapiUrl': `https://${apiId}.execute-api.${awsRegion}.amazonaws.com/development`,
-					'hasAWS': 'true',
+					'hasAWS': 'false',
 					'postinstalloption': 'option-123',
 					'lambdaVersion': 'development'
 				});
