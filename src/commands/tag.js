@@ -31,7 +31,7 @@ module.exports = function tag(options) {
 					lambdaConfig.arn = result.FunctionArn;
 					lambdaConfig.version = result.Version;
 				})
-				.then(() => getOwnerInfo(region))
+				.then(() => getOwnerInfo(region, undefined, options))
 				.then(ownerInfo => {
 					awsPartition = ownerInfo.partition;
 				});

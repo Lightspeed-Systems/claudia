@@ -251,7 +251,7 @@ module.exports = function create(options, optionalLogger) {
 					module: options['api-module'],
 					url: apiGWUrl(result.id, options.region, alias)
 				};
-				return rebuildWebApi(lambdaMetadata.FunctionName, alias, result.id, apiConfig, ownerAccount, awsPartition, options.region, logger, options['cache-api-config']);
+				return rebuildWebApi(lambdaMetadata.FunctionName, alias, result.id, apiConfig, ownerAccount, awsPartition, options.region, logger, options['cache-api-config'], options);
 			})
 			.then(() => {
 				if (apiModule.postDeploy) {
@@ -362,7 +362,7 @@ module.exports = function create(options, optionalLogger) {
 		functionName = packageInfo.name;
 		functionDesc = packageInfo.description;
 	})
-	.then(() => getOwnerInfo(options.region, logger))
+	.then(() => getOwnerInfo(options.region, logger, options))
 	.then(ownerInfo => {
 		ownerAccount = ownerInfo.account;
 		awsPartition = ownerInfo.partition;

@@ -1,8 +1,8 @@
 const { LambdaClient, GetPolicyCommand, AddPermissionCommand } = require('@aws-sdk/client-lambda'),
 	awsClientConfig = require('../util/aws-client-config');
-module.exports = function allowApiInvocation(functionName, functionVersion, restApiId, ownerId, awsPartition, awsRegion, path) {
+module.exports = function allowApiInvocation(functionName, functionVersion, restApiId, ownerId, awsPartition, awsRegion, path, options) {
 	'use strict';
-	const lambda = new LambdaClient(awsClientConfig(awsRegion)),
+	const lambda = new LambdaClient(awsClientConfig(awsRegion, options)),
 		activePath = path || '*/*/*',
 		policy = {
 			Action: 'lambda:InvokeFunction',

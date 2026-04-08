@@ -24,7 +24,7 @@ module.exports = function deployProxyApi(lambdaMetadata, options, ownerAccount, 
 			id: result.id,
 			url: apiGWUrl(result.id, options.region, alias)
 		};
-		return rebuildWebApi(lambdaMetadata.FunctionName, alias, result.id, apiConfig, ownerAccount, awsPartition, options.region, logger, options['cache-api-config']);
+		return rebuildWebApi(lambdaMetadata.FunctionName, alias, result.id, apiConfig, ownerAccount, awsPartition, options.region, logger, options['cache-api-config'], options);
 	})
 	.then(() => lambdaMetadata);
 };

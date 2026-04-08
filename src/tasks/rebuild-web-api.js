@@ -14,13 +14,13 @@ const apiGwCommands = require('@aws-sdk/client-api-gateway'),
 	clearApi = require('./clear-api'),
 	registerAuthorizers = require('./register-authorizers'),
 	awsClientConfig = require('../util/aws-client-config');
-module.exports = function rebuildWebApi(functionName, functionVersion, restApiId, apiConfig, ownerAccount, awsPartition, awsRegion, optionalLogger, configCacheStageVar) {
+module.exports = function rebuildWebApi(functionName, functionVersion, restApiId, apiConfig, ownerAccount, awsPartition, awsRegion, optionalLogger, configCacheStageVar, options) {
 	'use strict';
 	let authorizerIds;
 	const logger = optionalLogger || new NullLogger(),
 		apiGateway = retriableWrap(
 			loggingWrap(
-				new APIGatewayClient(awsClientConfig(awsRegion)),
+				new APIGatewayClient(awsClientConfig(awsRegion, options)),
 				{log: logger.logApiCall, logName: 'apigateway'}
 			),
 			apiGwCommands,
@@ -265,7 +265,7 @@ module.exports = function rebuildWebApi(functionName, functionVersion, restApiId
 			});
 		},
 		rebuildApi = function () {
-			return allowApiInvocation(functionName, functionVersion, restApiId, ownerAccount, awsPartition, awsRegion)
+			return allowApiInvocation(functionName, functionVersion, restApiId, ownerAccount, awsPartition, awsRegion, undefined, options)
 			.then(() => cacheRootId())
 			.then(() => sequentialPromiseMap(Object.keys(apiConfig.routes), configurePath))
 			.then(() => {
@@ -295,7 +295,7 @@ module.exports = function rebuildWebApi(functionName, functionVersion, restApiId
 		},
 		configureAuthorizers = function () {
 			if (apiConfig.authorizers && apiConfig.authorizers !== {}) {
-				return registerAuthorizers(apiConfig.authorizers, restApiId, ownerAccount, awsPartition, awsRegion, functionVersion, logger)
+				return registerAuthorizers(apiConfig.authorizers, restApiId, ownerAccount, awsPartition, awsRegion, functionVersion, logger, options)
 				.then(result => {
 					authorizerIds = result;
 				});

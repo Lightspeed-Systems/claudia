@@ -43,7 +43,7 @@ module.exports = function update(options, optionalLogger) {
 		awsRetries = options && options['aws-retries'] && parseInt(options['aws-retries'], 10) || 15,
 		alias = (options && options.version) || 'latest',
 		updateProxyApi = function () {
-			return allowApiInvocation(lambdaConfig.name, alias, apiConfig.id, ownerAccount, awsPartition, lambdaConfig.region)
+			return allowApiInvocation(lambdaConfig.name, alias, apiConfig.id, ownerAccount, awsPartition, lambdaConfig.region, undefined, options)
 				.then(() => apiGateway.createDeploymentPromise({
 					restApiId: apiConfig.id,
 					stageName: alias,
@@ -63,7 +63,7 @@ module.exports = function update(options, optionalLogger) {
 				return Promise.reject(`cannot load api config from ${apiModulePath}`);
 			}
 
-			return rebuildWebApi(lambdaConfig.name, alias, apiConfig.id, apiDef, ownerAccount, awsPartition, lambdaConfig.region, logger, options['cache-api-config'])
+			return rebuildWebApi(lambdaConfig.name, alias, apiConfig.id, apiDef, ownerAccount, awsPartition, lambdaConfig.region, logger, options['cache-api-config'], options)
 				.then(rebuildResult => {
 					if (apiModule.postDeploy) {
 						return apiModule.postDeploy(
@@ -211,7 +211,7 @@ module.exports = function update(options, optionalLogger) {
 		logger.logStage('loading Lambda config');
 		return initEnvVarsFromOptions(options);
 	})
-	.then(() => getOwnerInfo(options.region, logger))
+	.then(() => getOwnerInfo(options.region, logger, options))
 	.then(ownerInfo => {
 		ownerAccount = ownerInfo.account;
 		awsPartition = ownerInfo.partition;

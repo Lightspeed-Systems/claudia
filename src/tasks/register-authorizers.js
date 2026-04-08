@@ -7,18 +7,18 @@ const apiGwCommands = require('@aws-sdk/client-api-gateway'),
 	NullLogger = require('../util/null-logger'),
 	sequentialPromiseMap = require('sequential-promise-map'),
 	awsClientConfig = require('../util/aws-client-config');
-module.exports = function registerAuthorizers(authorizerMap, apiId, ownerAccount, awsPartition, awsRegion, functionVersion, optionalLogger) {
+module.exports = function registerAuthorizers(authorizerMap, apiId, ownerAccount, awsPartition, awsRegion, functionVersion, optionalLogger, options) {
 	'use strict';
 	const logger = optionalLogger || new NullLogger(),
 		apiGateway = retriableWrap(
 			loggingWrap(
-				new APIGatewayClient(awsClientConfig(awsRegion)),
+				new APIGatewayClient(awsClientConfig(awsRegion, options)),
 				{log: logger.logApiCall, logName: 'apigateway'}
 			),
 			apiGwCommands,
 			() => logger.logApiCall('rate-limited by AWS, waiting before retry')
 		),
-		lambda = loggingWrap(new LambdaClient(awsClientConfig(awsRegion)), {log: logger.logApiCall, logName: 'lambda'}),
+		lambda = loggingWrap(new LambdaClient(awsClientConfig(awsRegion, options)), {log: logger.logApiCall, logName: 'lambda'}),
 		removeAuthorizer = function (authConfig) {
 			return apiGateway.deleteAuthorizerPromise({
 				authorizerId: authConfig.id,
@@ -54,7 +54,7 @@ module.exports = function registerAuthorizers(authorizerMap, apiId, ownerAccount
 				authLambdaQualifier = functionVersion;
 			}
 			if (authConfig.lambdaName) {
-				return allowApiInvocation(authConfig.lambdaName, authLambdaQualifier, apiId, ownerAccount, awsPartition, awsRegion, 'authorizers/*');
+				return allowApiInvocation(authConfig.lambdaName, authLambdaQualifier, apiId, ownerAccount, awsPartition, awsRegion, 'authorizers/*', options);
 			} else {
 				return Promise.resolve();
 			}
