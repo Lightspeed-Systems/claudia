@@ -1,10 +1,10 @@
-const { S3Client } = require('@aws-sdk/client-s3'),
+const aws = require('aws-sdk'),
 	fs = require('fs');
 exports.handler = function (event, context) {
 	'use strict';
-	new S3Client({region: 'us-east-1'});
+	const s3 = new aws.S3({region: 'us-east-1'});
 	context.succeed({
-		endpoint: 'https://s3.us-east-1.amazonaws.com/',
+		endpoint: s3.endpoint.href,
 		modules: fs.readdirSync('node_modules')
 	});
 };

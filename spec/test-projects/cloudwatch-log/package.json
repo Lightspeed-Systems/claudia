@@ -6,6 +6,6 @@
     "main.js"
   ],
   "dependencies": {
-    "aws-sdk": "^2.2.47"
+    "@aws-sdk/client-cloudwatch-logs": "^3.1026.0"
   }
 }
