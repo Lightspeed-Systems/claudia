@@ -1,7 +1,8 @@
 const loadConfig = require('../util/loadconfig'),
 	fsPromise = require('../util/fs-promise'),
 	{ LambdaClient, GetFunctionConfigurationCommand, AddPermissionCommand } = require('@aws-sdk/client-lambda'),
-	{ SNSClient, SubscribeCommand } = require('@aws-sdk/client-sns');
+	{ SNSClient, SubscribeCommand } = require('@aws-sdk/client-sns'),
+	awsClientConfig = require('../util/aws-client-config');
 
 module.exports = function addSNSEventSource(options) {
 	'use strict';
@@ -9,8 +10,8 @@ module.exports = function addSNSEventSource(options) {
 		lambda,
 		sns;
 	const initServices = function () {
-			lambda = new LambdaClient({region: lambdaConfig.region});
-			sns = new SNSClient({region: lambdaConfig.region});
+			lambda = new LambdaClient(awsClientConfig(lambdaConfig.region, options));
+			sns = new SNSClient(awsClientConfig(lambdaConfig.region, options));
 		},
 		getLambda = () => lambda.send(new GetFunctionConfigurationCommand({FunctionName: lambdaConfig.name, Qualifier: options.version})),
 		readConfig = function () {

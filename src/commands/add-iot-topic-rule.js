@@ -1,7 +1,8 @@
 const loadConfig = require('../util/loadconfig'),
 	iamNameSanitize = require('../util/iam-name-sanitize'),
 	{ LambdaClient, GetFunctionConfigurationCommand, AddPermissionCommand } = require('@aws-sdk/client-lambda'),
-	{ IoTClient, GetTopicRuleCommand, CreateTopicRuleCommand } = require('@aws-sdk/client-iot');
+	{ IoTClient, GetTopicRuleCommand, CreateTopicRuleCommand } = require('@aws-sdk/client-iot'),
+	awsClientConfig = require('../util/aws-client-config');
 
 module.exports = function addIOTTopicRuleEventSource(options) {
 	'use strict';
@@ -10,8 +11,8 @@ module.exports = function addIOTTopicRuleEventSource(options) {
 		ruleName,
 		iot;
 	const initServices = function () {
-			lambda = new LambdaClient({region: lambdaConfig.region});
-			iot = new IoTClient({region: lambdaConfig.region});
+			lambda = new LambdaClient(awsClientConfig(lambdaConfig.region, options));
+			iot = new IoTClient(awsClientConfig(lambdaConfig.region, options));
 		},
 		readConfig = function () {
 			return loadConfig(options, {lambda: {name: true, region: true}})

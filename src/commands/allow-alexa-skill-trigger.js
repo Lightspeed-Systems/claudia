@@ -1,12 +1,13 @@
 const loadConfig = require('../util/loadconfig'),
-	{ LambdaClient, GetFunctionConfigurationCommand, AddPermissionCommand } = require('@aws-sdk/client-lambda');
+	{ LambdaClient, GetFunctionConfigurationCommand, AddPermissionCommand } = require('@aws-sdk/client-lambda'),
+	awsClientConfig = require('../util/aws-client-config');
 
 module.exports = function allowAlexaSkillTrigger(options) {
 	'use strict';
 	let lambdaConfig,
 		lambda;
 	const initServices = function () {
-			lambda = new LambdaClient({region: lambdaConfig.region});
+			lambda = new LambdaClient(awsClientConfig(lambdaConfig.region, options));
 		},
 		getLambda = () => lambda.send(new GetFunctionConfigurationCommand({FunctionName: lambdaConfig.name, Qualifier: options.version})),
 		readConfig = function () {

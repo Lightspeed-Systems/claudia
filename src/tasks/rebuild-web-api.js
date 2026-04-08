@@ -12,14 +12,15 @@ const apiGwCommands = require('@aws-sdk/client-api-gateway'),
 	flattenRequestParameters = require('./flatten-request-parameters'),
 	patchBinaryTypes = require('./patch-binary-types'),
 	clearApi = require('./clear-api'),
-	registerAuthorizers = require('./register-authorizers');
+	registerAuthorizers = require('./register-authorizers'),
+	awsClientConfig = require('../util/aws-client-config');
 module.exports = function rebuildWebApi(functionName, functionVersion, restApiId, apiConfig, ownerAccount, awsPartition, awsRegion, optionalLogger, configCacheStageVar) {
 	'use strict';
 	let authorizerIds;
 	const logger = optionalLogger || new NullLogger(),
 		apiGateway = retriableWrap(
 			loggingWrap(
-				new APIGatewayClient({region: awsRegion}),
+				new APIGatewayClient(awsClientConfig(awsRegion)),
 				{log: logger.logApiCall, logName: 'apigateway'}
 			),
 			apiGwCommands,

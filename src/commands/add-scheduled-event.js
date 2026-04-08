@@ -1,7 +1,8 @@
 const loadConfig = require('../util/loadconfig'),
 	fsPromise = require('../util/fs-promise'),
 	{ LambdaClient, GetFunctionConfigurationCommand, AddPermissionCommand } = require('@aws-sdk/client-lambda'),
-	{ CloudWatchEventsClient, PutRuleCommand, PutTargetsCommand } = require('@aws-sdk/client-cloudwatch-events');
+	{ CloudWatchEventsClient, PutRuleCommand, PutTargetsCommand } = require('@aws-sdk/client-cloudwatch-events'),
+	awsClientConfig = require('../util/aws-client-config');
 
 module.exports = function addScheduledEvent(options) {
 	'use strict';
@@ -11,8 +12,8 @@ module.exports = function addScheduledEvent(options) {
 		eventData,
 		ruleArn;
 	const initServices = function () {
-			lambda = new LambdaClient({region: lambdaConfig.region});
-			events = new CloudWatchEventsClient({region: lambdaConfig.region});
+			lambda = new LambdaClient(awsClientConfig(lambdaConfig.region, options));
+			events = new CloudWatchEventsClient(awsClientConfig(lambdaConfig.region, options));
 		},
 		getLambda = () => lambda.send(new GetFunctionConfigurationCommand({FunctionName: lambdaConfig.name, Qualifier: options.version})),
 		readConfig = function () {

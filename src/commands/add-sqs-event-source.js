@@ -4,7 +4,8 @@ const loadConfig = require('../util/loadconfig'),
 	retry = require('oh-no-i-insist'),
 	{ LambdaClient, GetFunctionConfigurationCommand, CreateEventSourceMappingCommand } = require('@aws-sdk/client-lambda'),
 	{ IAMClient, PutRolePolicyCommand } = require('@aws-sdk/client-iam'),
-	{ SQSClient, GetQueueUrlCommand, GetQueueAttributesCommand } = require('@aws-sdk/client-sqs');
+	{ SQSClient, GetQueueUrlCommand, GetQueueAttributesCommand } = require('@aws-sdk/client-sqs'),
+	awsClientConfig = require('../util/aws-client-config');
 
 module.exports = function addSQSEventSource(options, logger) {
 	'use strict';
@@ -15,9 +16,9 @@ module.exports = function addSQSEventSource(options, logger) {
 	const awsDelay = Number(options['aws-delay']) || 5000,
 		awsRetries = Number(options['aws-retries']) || 15,
 		initServices = function () {
-			lambda = new LambdaClient({region: lambdaConfig.region});
-			iam = new IAMClient({region: lambdaConfig.region});
-			sqs = new SQSClient({region: lambdaConfig.region});
+			lambda = new LambdaClient(awsClientConfig(lambdaConfig.region, options));
+			iam = new IAMClient(awsClientConfig(lambdaConfig.region, options));
+			sqs = new SQSClient(awsClientConfig(lambdaConfig.region, options));
 		},
 		getLambda = () => lambda.send(new GetFunctionConfigurationCommand({FunctionName: lambdaConfig.name, Qualifier: options.version})),
 		readConfig = function () {

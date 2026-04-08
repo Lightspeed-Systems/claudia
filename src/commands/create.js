@@ -34,7 +34,8 @@ const path = require('path'),
 	isSNSArn = require('../util/is-sns-arn'),
 	lambdaInvocationPolicy = require('../policies/lambda-invocation-policy'),
 	waitUntilNotPending = require('../tasks/wait-until-not-pending'),
-	NullLogger = require('../util/null-logger');
+	NullLogger = require('../util/null-logger'),
+	awsClientConfig = require('../util/aws-client-config');
 module.exports = function create(options, optionalLogger) {
 	'use strict';
 	let roleMetadata,
@@ -52,9 +53,9 @@ module.exports = function create(options, optionalLogger) {
 		awsRetries = options && options['aws-retries'] && parseInt(options['aws-retries'], 10) || 15,
 		source = (options && options.source) || process.cwd(),
 		configFile = (options && options.config) || path.join(source, 'claudia.json'),
-		iam = loggingWrap(new IAMClient({region: options.region}), {log: logger.logApiCall, logName: 'iam'}),
-		lambda = loggingWrap(new LambdaClient({region: options.region}), {log: logger.logApiCall, logName: 'lambda'}),
-		s3 = loggingWrap(new S3Client({region: options.region}), {log: logger.logApiCall, logName: 's3'}),
+		iam = loggingWrap(new IAMClient(awsClientConfig(options.region, options)), {log: logger.logApiCall, logName: 'iam'}),
+		lambda = loggingWrap(new LambdaClient(awsClientConfig(options.region, options)), {log: logger.logApiCall, logName: 'lambda'}),
+		s3 = loggingWrap(new S3Client(awsClientConfig(options.region, options)), {log: logger.logApiCall, logName: 's3'}),
 		getSnsDLQTopic = function () {
 			const topicNameOrArn = options['dlq-sns'];
 			if (!topicNameOrArn) {
@@ -66,7 +67,7 @@ module.exports = function create(options, optionalLogger) {
 			return `arn:${awsPartition}:sns:${options.region}:${ownerAccount}:${topicNameOrArn}`;
 		},
 		apiGatewayPromise = retriableWrap(
-			loggingWrap(new APIGatewayClient({region: options.region}), {log: logger.logApiCall, logName: 'apigateway'}),
+			loggingWrap(new APIGatewayClient(awsClientConfig(options.region, options)), {log: logger.logApiCall, logName: 'apigateway'}),
 			apiGwCommands,
 			() => logger.logStage('rate-limited by AWS, waiting before retry')
 		),

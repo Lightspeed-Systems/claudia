@@ -7,7 +7,8 @@ const loadConfig = require('../util/loadconfig'),
 	patchLambdaFunctionAssociations = require('../tasks/patch-lambda-function-associations'),
 	{ LambdaClient, GetFunctionConfigurationCommand } = require('@aws-sdk/client-lambda'),
 	{ IAMClient, GetRoleCommand, UpdateAssumeRolePolicyCommand } = require('@aws-sdk/client-iam'),
-	{ CloudFrontClient, GetDistributionConfigCommand, UpdateDistributionCommand } = require('@aws-sdk/client-cloudfront');
+	{ CloudFrontClient, GetDistributionConfigCommand, UpdateDistributionCommand } = require('@aws-sdk/client-cloudfront'),
+	awsClientConfig = require('../util/aws-client-config');
 
 module.exports = function setCloudFrontTrigger(options, optionalLogger) {
 	'use strict';
@@ -32,9 +33,9 @@ to propagate changes to Lambda@Edge.
 			console.log(`\x1b[3${color}m${text}\x1b[0m`);
 		},
 		initServices = function (config) {
-			lambda = loggingWrap(new LambdaClient({region: config.region}), {log: logger.logApiCall, logName: 'lambda'});
-			iam = loggingWrap(new IAMClient({region: config.region}), {log: logger.logApiCall, logName: 'iam'});
-			cloudFront = loggingWrap(new CloudFrontClient({region: config.region}), {log: logger.logApiCall, logName: 'cloudfront'});
+			lambda = loggingWrap(new LambdaClient(awsClientConfig(config.region, options)), {log: logger.logApiCall, logName: 'lambda'});
+			iam = loggingWrap(new IAMClient(awsClientConfig(config.region, options)), {log: logger.logApiCall, logName: 'iam'});
+			cloudFront = loggingWrap(new CloudFrontClient(awsClientConfig(config.region, options)), {log: logger.logApiCall, logName: 'cloudfront'});
 		},
 		readConfig = function () {
 			const version = String(options.version);

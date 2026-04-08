@@ -2,7 +2,8 @@ const loadConfig = require('../util/loadconfig'),
 	parseKeyValueCSV = require('../util/parse-key-value-csv'),
 	getOwnerInfo = require('../tasks/get-owner-info'),
 	{ LambdaClient, GetFunctionConfigurationCommand, TagResourceCommand: LambdaTagResourceCommand } = require('@aws-sdk/client-lambda'),
-	{ APIGatewayClient, TagResourceCommand: APIGWTagResourceCommand } = require('@aws-sdk/client-api-gateway');
+	{ APIGatewayClient, TagResourceCommand: APIGWTagResourceCommand } = require('@aws-sdk/client-api-gateway'),
+	awsClientConfig = require('../util/aws-client-config');
 
 module.exports = function tag(options) {
 	'use strict';
@@ -13,8 +14,8 @@ module.exports = function tag(options) {
 		region,
 		api;
 	const initServices = function () {
-			lambda = new LambdaClient({region: lambdaConfig.region});
-			api = new APIGatewayClient({region: lambdaConfig.region});
+			lambda = new LambdaClient(awsClientConfig(lambdaConfig.region, options));
+			api = new APIGatewayClient(awsClientConfig(lambdaConfig.region, options));
 		},
 		getLambda = () => lambda.send(new GetFunctionConfigurationCommand({FunctionName: lambdaConfig.name, Qualifier: options.version})),
 		readConfig = function () {

@@ -10,7 +10,8 @@ const apiGwCommands = require('@aws-sdk/client-api-gateway'),
 	apiGWUrl = require('../util/apigw-url'),
 	NullLogger = require('../util/null-logger'),
 	markAlias = require('../tasks/mark-alias'),
-	getOwnerInfo = require('../tasks/get-owner-info');
+	getOwnerInfo = require('../tasks/get-owner-info'),
+	awsClientConfig = require('../util/aws-client-config');
 module.exports = function setVersion(options, optionalLogger) {
 	'use strict';
 	let lambdaConfig, lambda, apiGateway, apiConfig;
@@ -47,10 +48,10 @@ module.exports = function setVersion(options, optionalLogger) {
 	.then(config => {
 		lambdaConfig = config.lambda;
 		apiConfig = config.api;
-		lambda = loggingWrap(new LambdaClient({region: lambdaConfig.region}), {log: logger.logApiCall, logName: 'lambda'});
+		lambda = loggingWrap(new LambdaClient(awsClientConfig(lambdaConfig.region, options)), {log: logger.logApiCall, logName: 'lambda'});
 		apiGateway = retriableWrap(
 			loggingWrap(
-				new APIGatewayClient({region: lambdaConfig.region}),
+				new APIGatewayClient(awsClientConfig(lambdaConfig.region, options)),
 				{log: logger.logApiCall, logName: 'apigateway'}
 			),
 			apiGwCommands,

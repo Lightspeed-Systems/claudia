@@ -2,7 +2,8 @@ const loadConfig = require('../util/loadconfig'),
 	iamNameSanitize = require('../util/iam-name-sanitize'),
 	{ LambdaClient, GetFunctionConfigurationCommand, AddPermissionCommand } = require('@aws-sdk/client-lambda'),
 	{ IAMClient, PutRolePolicyCommand } = require('@aws-sdk/client-iam'),
-	{ S3Client, GetBucketNotificationConfigurationCommand, PutBucketNotificationConfigurationCommand } = require('@aws-sdk/client-s3');
+	{ S3Client, GetBucketNotificationConfigurationCommand, PutBucketNotificationConfigurationCommand } = require('@aws-sdk/client-s3'),
+	awsClientConfig = require('../util/aws-client-config');
 module.exports = function addS3EventSource(options) {
 	'use strict';
 	let lambdaConfig,
@@ -10,7 +11,7 @@ module.exports = function addS3EventSource(options) {
 		lambda;
 	const ts = Date.now(),
 		getLambda = function (config) {
-			lambda = new LambdaClient({region: config.lambda.region});
+			lambda = new LambdaClient(awsClientConfig(config.lambda.region, options));
 			lambdaConfig = config.lambda;
 			return lambda.send(new GetFunctionConfigurationCommand({FunctionName: lambdaConfig.name, Qualifier: options.version}));
 		},
@@ -28,7 +29,7 @@ module.exports = function addS3EventSource(options) {
 				});
 		},
 		addS3AccessPolicy = function () {
-			const iam = new IAMClient({region: lambdaConfig.region});
+			const iam = new IAMClient(awsClientConfig(lambdaConfig.region, options));
 			return iam.send(new PutRolePolicyCommand({
 				RoleName: lambdaConfig.role,
 				PolicyName: iamNameSanitize(`s3-${options.bucket}-access-${ts}`),
@@ -60,7 +61,7 @@ module.exports = function addS3EventSource(options) {
 		},
 		addBucketNotificationConfig = function () {
 			const events = options.events ? options.events.split(',') : ['s3:ObjectCreated:*'],
-				s3 = new S3Client({region: lambdaConfig.region}),
+				s3 = new S3Client(awsClientConfig(lambdaConfig.region, options)),
 				eventConfig = {
 					LambdaFunctionArn: lambdaConfig.arn,
 					Events: events

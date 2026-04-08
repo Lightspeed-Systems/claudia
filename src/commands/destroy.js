@@ -6,7 +6,8 @@ const apiGwCommands = require('@aws-sdk/client-api-gateway'),
 	fsPromise = require('../util/fs-promise'),
 	path = require('path'),
 	retriableWrap = require('../util/retriable-wrap'),
-	destroyRole = require('../util/destroy-role');
+	destroyRole = require('../util/destroy-role'),
+	awsClientConfig = require('../util/aws-client-config');
 module.exports = function destroy(options) {
 	'use strict';
 	let lambdaConfig, apiConfig;
@@ -17,11 +18,11 @@ module.exports = function destroy(options) {
 			apiConfig = config.api;
 		})
 		.then(() => {
-			const lambda = new LambdaClient({ region: lambdaConfig.region });
+			const lambda = new LambdaClient(awsClientConfig(lambdaConfig.region, options));
 			return lambda.send(new DeleteFunctionCommand({ FunctionName: lambdaConfig.name }));
 		})
 		.then(() => {
-			const apiGateway = retriableWrap(new APIGatewayClient({ region: lambdaConfig.region }), apiGwCommands);
+			const apiGateway = retriableWrap(new APIGatewayClient(awsClientConfig(lambdaConfig.region, options)), apiGwCommands);
 			if (apiConfig) {
 				return apiGateway.deleteRestApiPromise({
 					restApiId: apiConfig.id
@@ -29,7 +30,7 @@ module.exports = function destroy(options) {
 			}
 		})
 		.then(() => {
-			const iam = new IAMClient({ region: lambdaConfig.region });
+			const iam = new IAMClient(awsClientConfig(lambdaConfig.region, options));
 			if (lambdaConfig.role && !lambdaConfig.sharedRole) {
 				return destroyRole(iam, lambdaConfig.role);
 			}

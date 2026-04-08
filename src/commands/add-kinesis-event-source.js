@@ -4,7 +4,8 @@ const loadConfig = require('../util/loadconfig'),
 	retry = require('oh-no-i-insist'),
 	{ LambdaClient, GetFunctionConfigurationCommand, CreateEventSourceMappingCommand } = require('@aws-sdk/client-lambda'),
 	{ IAMClient, AttachRolePolicyCommand } = require('@aws-sdk/client-iam'),
-	{ KinesisClient, DescribeStreamCommand } = require('@aws-sdk/client-kinesis');
+	{ KinesisClient, DescribeStreamCommand } = require('@aws-sdk/client-kinesis'),
+	awsClientConfig = require('../util/aws-client-config');
 
 module.exports = function addKinesisEventSource(options, logger) {
 	'use strict';
@@ -15,9 +16,9 @@ module.exports = function addKinesisEventSource(options, logger) {
 	const awsDelay = Number(options['aws-delay']) || 5000,
 		awsRetries = Number(options['aws-retries']) || 15,
 		initServices = function () {
-			lambda = new LambdaClient({region: lambdaConfig.region});
-			iam = new IAMClient({region: lambdaConfig.region});
-			kinesis = new KinesisClient({region: lambdaConfig.region});
+			lambda = new LambdaClient(awsClientConfig(lambdaConfig.region, options));
+			iam = new IAMClient(awsClientConfig(lambdaConfig.region, options));
+			kinesis = new KinesisClient(awsClientConfig(lambdaConfig.region, options));
 		},
 		getLambda = () => lambda.send(new GetFunctionConfigurationCommand({FunctionName: lambdaConfig.name, Qualifier: options.version})),
 		readConfig = function () {
