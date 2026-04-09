@@ -7,16 +7,10 @@ const removeKeysWithPrefix = require('./remove-keys-with-prefix'),
 		if (npmPath) {
 			return Promise.resolve(npmPath);
 		}
-		return new Promise((resolve, reject) => {
-			which('npm', (err, path) => {
-				if (err) {
-					return reject(err);
-				}
-				npmPath = path;
-				resolve(path);
-			});
+		return which('npm').then(path => {
+			npmPath = path;
+			return path;
 		});
-
 	},
 	toArgs = function (opts) {
 		'use strict';
