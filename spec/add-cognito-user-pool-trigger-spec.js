@@ -26,10 +26,10 @@ describe('addCognitoUserPoolTrigger', () => {
 				'user-pool-id': result.UserPool.Id,
 				source: workingdir
 			};
-		}).then(done);
+		}).then(() => done());
 	});
 	afterEach(done => {
-		destroyObjects(newObjects).then(done, done.fail);
+		destroyObjects(newObjects).then(() => done(), done.fail);
 	});
 	it('fails when the pool ID is not defined in options', done => {
 		config['user-pool-id'] = '';
@@ -77,7 +77,7 @@ describe('addCognitoUserPoolTrigger', () => {
 			.then(result => {
 				expect(result.UserPool.LambdaConfig).toEqual({PreAuthentication: functionArn});
 			})
-			.then(done, done.fail);
+			.then(() => done(), done.fail);
 		});
 		it('keeps other user pool attributes (aws bug workaround check)', done => {
 			config.events = 'PreAuthentication';
@@ -96,7 +96,7 @@ describe('addCognitoUserPoolTrigger', () => {
 				expect(result.UserPool.EmailVerificationMessage).toEqual('Hi there token {####}');
 				expect(result.UserPool.LambdaConfig).toEqual({PreAuthentication: functionArn});
 			})
-			.then(done, done.fail);
+			.then(() => done(), done.fail);
 
 		});
 		it('adds multiple events if specified', done => {
@@ -112,7 +112,7 @@ describe('addCognitoUserPoolTrigger', () => {
 					PreSignUp: functionArn
 				});
 			})
-			.then(done, done.fail);
+			.then(() => done(), done.fail);
 		});
 		it('binds to an alias, if the version is provided', done => {
 			config.events = 'PreAuthentication';
@@ -126,7 +126,7 @@ describe('addCognitoUserPoolTrigger', () => {
 			.then(result => {
 				expect(result.UserPool.LambdaConfig).toEqual({PreAuthentication: functionArn});
 			})
-			.then(done, done.fail);
+			.then(() => done(), done.fail);
 		});
 		it('adds permission for the trigger to run', done => {
 			config.events = 'PreSignUp';

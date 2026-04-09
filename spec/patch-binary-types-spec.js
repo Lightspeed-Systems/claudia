@@ -12,7 +12,7 @@ describe('patchBinaryTypes', () => {
 		testRunName = 'test' + Date.now();
 	});
 	afterEach(done => {
-		destroyObjects({restApi: apiId}).then(done, done.fail);
+		destroyObjects({restApi: apiId}).then(() => done(), done.fail);
 	});
 	it('adds new types to a blank API', done => {
 		const newTypes = ['image/png', 'image/jpg'];
@@ -23,7 +23,7 @@ describe('patchBinaryTypes', () => {
 			.then(apiConfig => {
 				expect(apiConfig.binaryMediaTypes).toEqual(newTypes);
 			})
-			.then(done, done.fail);
+			.then(() => done(), done.fail);
 	});
 
 	it('modifies types of an existing API', done => {
@@ -35,7 +35,7 @@ describe('patchBinaryTypes', () => {
 			.then(apiConfig => {
 				expect(apiConfig.binaryMediaTypes).toEqual(newTypes);
 			})
-			.then(done, done.fail);
+			.then(() => done(), done.fail);
 	});
 	it('removes all types from an existing API', done => {
 		apiGateway.createRestApiPromise({ name: testRunName, binaryMediaTypes: ['image/png', 'image/jpg'] })
@@ -45,6 +45,6 @@ describe('patchBinaryTypes', () => {
 			.then(apiConfig => {
 				expect(apiConfig.binaryMediaTypes).toBeUndefined();
 			})
-			.then(done, done.fail);
+			.then(() => done(), done.fail);
 	});
 });

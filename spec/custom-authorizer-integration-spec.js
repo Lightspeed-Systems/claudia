@@ -62,7 +62,7 @@ describe('customAuthorizers', () => {
 					resolveErrors: false
 				})
 				.then(response => expect(JSON.parse(response.body)).toEqual('OK'))
-				.then(done, done.fail);
+				.then(() => done(), done.fail);
 			});
 			it('blocks access to methods without an authorizer without authentication headers', done => {
 				invoke(version + '/locked', {
@@ -74,7 +74,7 @@ describe('customAuthorizers', () => {
 					expect(response.headers['x-amzn-errortype']).toEqual('UnauthorizedException');
 					expect(JSON.parse(response.body)).toEqual({ message: 'Unauthorized' });
 				})
-				.then(done, done.fail);
+				.then(() => done(), done.fail);
 			});
 			it('respects IAM policy for unauthorized users', done => {
 				invoke(version + '/locked', {
@@ -87,7 +87,7 @@ describe('customAuthorizers', () => {
 					expect(response.headers['x-amzn-errortype']).toEqual('AccessDeniedException');
 					expect(JSON.parse(response.body)).toEqual({ Message: 'User is not authorized to access this resource' });
 				})
-				.then(done, done.fail);
+				.then(() => done(), done.fail);
 			});
 			it('respects IAM policy for authorized users', done => {
 				invoke(version + '/unlocked', {
@@ -96,7 +96,7 @@ describe('customAuthorizers', () => {
 					resolveErrors: false
 				})
 				.then(response => expect(JSON.parse(response.body)).toEqual('OK for Bob'))
-				.then(done, done.fail);
+				.then(() => done(), done.fail);
 			});
 		};
 	beforeAll(done => {
@@ -104,7 +104,7 @@ describe('customAuthorizers', () => {
 		createTestFixture()
 			.then(() => waitUntilDeployed('original'))
 			.then(() => console.log('created'))
-			.then(done, done.fail);
+			.then(() => done(), done.fail);
 	});
 	afterAll(done => {
 		console.log('destroying custom authorizer examples');
@@ -113,7 +113,7 @@ describe('customAuthorizers', () => {
 			.then(() => fsUtil.rmDir(workingdir))
 			.then(() => console.log('destroyed'))
 			.catch(err => console.log('error cleaning up', err))
-			.then(done);
+			.then(() => done());
 	});
 
 	describe('create wires up authorizers intially', () => {
@@ -126,7 +126,7 @@ describe('customAuthorizers', () => {
 				.then(() => update({ source: workingdir, config: path.join(workingdir, 'claudia-api.json'), version: 'new' }))
 				.then(() => waitUntilDeployed('new'))
 				.then(() => console.log('updated'))
-				.then(done, err => {
+				.then(() => done(), err => {
 					console.log('failed to update custom authorizer examples', err);
 					done.fail();
 				});

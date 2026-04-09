@@ -34,26 +34,26 @@ describe('setCloudfrontTrigger', () => {
 	});
 	afterEach(done => {
 		delete newObjects.lambdaFunction; //replicated functions cannot be deleted
-		destroyObjects(newObjects).then(done, done.fail);
+		destroyObjects(newObjects).then(() => done(), done.fail);
 	});
 	describe('param validation', () => {
 		it('rejects if distribution-id is not set', done => {
 			delete config['distribution-id'];
 			underTest(config).then(done.fail)
 				.catch(e => expect(e).toMatch(/Cloudfront Distribution ID is not specified/))
-				.then(done, done.fail);
+				.then(() => done(), done.fail);
 		});
 		it('rejects if version is not set', done => {
 			delete config.version;
 			underTest(config).then(done.fail)
 				.catch(e => expect(e).toMatch(/Lambda@Edge requires a fixed version/))
-				.then(done, done.fail);
+				.then(() => done(), done.fail);
 		});
 		it('rejects if event types are not set', done => {
 			delete config['event-types'];
 			underTest(config).then(done.fail)
 				.catch(e => expect(e).toMatch(/Event types must be specified/))
-				.then(done, done.fail);
+				.then(() => done(), done.fail);
 		});
 
 	});
@@ -82,7 +82,7 @@ describe('setCloudfrontTrigger', () => {
 				config.version = 'dev';
 				createLambda(createConfig)
 					.then(() => underTest(config))
-					.then(done, done.fail);
+					.then(() => done(), done.fail);
 			});
 			it('assigns the events for the actual numeric version', done => {
 				cloudfront.send(new GetDistributionConfigCommand({Id: distributionId}))
@@ -91,7 +91,7 @@ describe('setCloudfrontTrigger', () => {
 						expect(associations['viewer-request']).toMatch(new RegExp(`${testRunName}:1$`));
 						expect(associations['origin-request']).toMatch(new RegExp(`${testRunName}:1$`));
 					})
-					.then(done, done.fail);
+					.then(() => done(), done.fail);
 			});
 		});
 		describe('when the version is a number', () => {
@@ -99,7 +99,7 @@ describe('setCloudfrontTrigger', () => {
 				config.version = 1;
 				createLambda(createConfig)
 					.then(() => underTest(config))
-					.then(done, done.fail);
+					.then(() => done(), done.fail);
 			});
 			it('assigns the events for the given version', done => {
 				cloudfront.send(new GetDistributionConfigCommand({Id: distributionId}))
@@ -108,7 +108,7 @@ describe('setCloudfrontTrigger', () => {
 						expect(associations['viewer-request']).toMatch(new RegExp(`${testRunName}:1$`));
 						expect(associations['origin-request']).toMatch(new RegExp(`${testRunName}:1$`));
 					})
-					.then(done, done.fail);
+					.then(() => done(), done.fail);
 			});
 		});
 		describe('role assignment', () => {
@@ -116,7 +116,7 @@ describe('setCloudfrontTrigger', () => {
 				config.version = 'dev';
 				createLambda(createConfig)
 					.then(() => underTest(config))
-					.then(done, done.fail);
+					.then(() => done(), done.fail);
 			});
 			it('allows function to assume role lambda@edge', done => {
 				iam.send(new GetRoleCommand({RoleName: newObjects.lambdaRole}))
@@ -128,7 +128,7 @@ describe('setCloudfrontTrigger', () => {
 						expect(policy.Statement[1].Action).toEqual('sts:AssumeRole');
 						expect(policy.Statement[1].Principal.Service).toEqual('edgelambda.amazonaws.com');
 					})
-					.then(done, done.fail);
+					.then(() => done(), done.fail);
 			});
 			it('does not change the policy if it already supports lambda@edge', done => {
 				underTest(config)
@@ -138,14 +138,14 @@ describe('setCloudfrontTrigger', () => {
 							policy = JSON.parse(policyDocument);
 						expect(policy.Statement.length).toEqual(2);
 					})
-					.then(done, done.fail);
+					.then(() => done(), done.fail);
 			});
 		});
 		describe('matching distribution behaviors by path', () => {
 			beforeEach(done => {
 				config.version = 1;
 				createLambda(createConfig)
-					.then(done, done.fail);
+					.then(() => done(), done.fail);
 			});
 
 			it('assigns the events to a specific behavior when the path is set', done => {
@@ -164,7 +164,7 @@ describe('setCloudfrontTrigger', () => {
 						expect(associations['viewer-request']).not.toMatch(new RegExp(`${testRunName}:1$`));
 						expect(associations['origin-request']).not.toMatch(new RegExp(`${testRunName}:1$`));
 					})
-					.then(done, done.fail);
+					.then(() => done(), done.fail);
 			});
 			it('blows up if no behavior matches the path pattern', done => {
 				let distributionConfig;
@@ -181,7 +181,7 @@ describe('setCloudfrontTrigger', () => {
 						expect(associations['viewer-request']).not.toMatch(new RegExp(`${testRunName}:1$`));
 						expect(associations['origin-request']).not.toMatch(new RegExp(`${testRunName}:1$`));
 					})
-					.then(done, done.fail);
+					.then(() => done(), done.fail);
 			});
 		});
 

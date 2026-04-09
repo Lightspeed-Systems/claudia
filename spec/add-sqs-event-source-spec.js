@@ -26,7 +26,7 @@ describe('addSQSEventSource', () => {
 		sqs = new SQSClient({region: awsRegion});
 	});
 	afterEach(done => {
-		destroyObjects(newObjects).then(done, done.fail);
+		destroyObjects(newObjects).then(() => done(), done.fail);
 	});
 	describe('validation', () => {
 		it('fails when the queue is not defined in options', done => {
@@ -77,7 +77,7 @@ describe('addSQSEventSource', () => {
 			.then(result => {
 				queueArn = result.Attributes.QueueArn;
 			})
-			.then(done, done.fail);
+			.then(() => done(), done.fail);
 		});
 		const createLambda = function () {
 				return create(createConfig)
@@ -115,7 +115,7 @@ describe('addSQSEventSource', () => {
 						expect(config.EventSourceMappings[0].FunctionArn).toMatch(new RegExp(testRunName + '$'));
 						expect(config.EventSourceMappings[0].EventSourceArn).toEqual(queueArn);
 					})
-					.then(done, done.fail);
+					.then(() => done(), done.fail);
 			});
 			it('sets up queue using an ARN', done => {
 				config.queue = queueArn;
@@ -125,7 +125,7 @@ describe('addSQSEventSource', () => {
 					.then(config => {
 						expect(config.EventSourceMappings[0].EventSourceArn).toEqual(queueArn);
 					})
-					.then(done, done.fail);
+					.then(() => done(), done.fail);
 			});
 			it('binds to an alias, if the version is provided', done => {
 				createConfig.version = 'special';
@@ -138,7 +138,7 @@ describe('addSQSEventSource', () => {
 						expect(config.EventSourceMappings[0].FunctionArn).toMatch(new RegExp(testRunName + ':special$'));
 						expect(config.EventSourceMappings[0].EventSourceArn).toEqual(queueArn);
 					})
-					.then(done, done.fail);
+					.then(() => done(), done.fail);
 			});
 			it('sets up batch size', done => {
 				config['batch-size'] = 5;
@@ -149,7 +149,7 @@ describe('addSQSEventSource', () => {
 						expect(config.EventSourceMappings.length).toBe(1);
 						expect(config.EventSourceMappings[0].BatchSize).toEqual(5);
 					})
-					.then(done, done.fail);
+					.then(() => done(), done.fail);
 			});
 		});
 		describe('lambda invocation', () => {
@@ -167,7 +167,7 @@ describe('addSQSEventSource', () => {
 						'set-env': 'QUEUE_URL=' + queueUrl,
 						policies: path.join(workingdir, 'policies')
 					};
-				}).then(done, done.fail);
+				}).then(() => done(), done.fail);
 			});
 			it('invokes lambda from SQS when no version is given', done => {
 				createLambda()
@@ -178,7 +178,7 @@ describe('addSQSEventSource', () => {
 						const body = JSON.parse(message.Body);
 						expect(body.invokedFunctionArn).toMatch(new RegExp(testRunName + '$'));
 					})
-					.then(done, done.fail);
+					.then(() => done(), done.fail);
 			});
 			it('invokes lambda from SQS when version is provided', done => {
 				createConfig.version = 'special';
@@ -191,7 +191,7 @@ describe('addSQSEventSource', () => {
 						const body = JSON.parse(message.Body);
 						expect(body.invokedFunctionArn).toMatch(new RegExp(testRunName + ':special$'));
 					})
-					.then(done, done.fail);
+					.then(() => done(), done.fail);
 			});
 		});
 	});

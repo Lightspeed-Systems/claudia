@@ -14,24 +14,24 @@ describe('readjson', () => {
 	it('fails if the file is not provided', done => {
 		underTest()
 		.then(done.fail, message => expect(message).toEqual('file name not provided'))
-		.then(done);
+		.then(() => done());
 	});
 	it('fails if the file is missing', done => {
 		underTest(workingfile)
 		.then(done.fail, message => expect(message).toEqual(workingfile + ' is missing'))
-		.then(done);
+		.then(() => done());
 	});
 	it('fails if the file is not valid json', done => {
 		fs.writeFileSync(workingfile, 'not-json', 'utf8');
 		underTest(workingfile)
 		.then(done.fail, message => expect(message).toEqual('invalid configuration in ' + workingfile))
-		.then(done);
+		.then(() => done());
 	});
 	it('resolves with JSON-parsed contents', done => {
 		fs.writeFileSync(workingfile, JSON.stringify({ pack: 'me' }), 'utf8');
 		underTest(workingfile)
 		.then(result => expect(result).toEqual({ pack: 'me' }))
-		.then(done)
+		.then(() => done())
 		.catch(done.fail);
 	});
 });

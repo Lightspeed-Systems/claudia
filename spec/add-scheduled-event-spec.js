@@ -31,7 +31,7 @@ describe('addScheduledEvent', () => {
 		};
 	});
 	afterEach(done => {
-		destroyObjects(newObjects).then(done, done.fail);
+		destroyObjects(newObjects).then(() => done(), done.fail);
 	});
 	it('fails when the event file is not defined in options', done => {
 		config.event = '';
@@ -105,7 +105,7 @@ describe('addScheduledEvent', () => {
 				expect(eventConfig.State).toEqual('ENABLED');
 				expect(eventConfig.ScheduleExpression).toEqual('rate(5 minutes)');
 			})
-			.then(done, done.fail);
+			.then(() => done(), done.fail);
 		});
 		it('uses the rate argument as a shorthand for the schedule expression', done => {
 			config.schedule = '';
@@ -121,7 +121,7 @@ describe('addScheduledEvent', () => {
 				expect(eventConfig.State).toEqual('ENABLED');
 				expect(eventConfig.ScheduleExpression).toEqual('rate(10 minutes)');
 			})
-			.then(done, done.fail);
+			.then(() => done(), done.fail);
 		});
 		it('uses the cron argument as a shorthand for the schedule expression', done => {
 			config.schedule = '';
@@ -137,7 +137,7 @@ describe('addScheduledEvent', () => {
 				expect(eventConfig.State).toEqual('ENABLED');
 				expect(eventConfig.ScheduleExpression).toEqual('cron(0 8 1 * ? *)');
 			})
-			.then(done, done.fail);
+			.then(() => done(), done.fail);
 		});
 		it('sets up privileges and rule notifications', done => {
 			let functionArn;
@@ -158,7 +158,7 @@ describe('addScheduledEvent', () => {
 				expect(config.Targets[0].Arn).toEqual(functionArn);
 				expect(eventConfig).toEqual(JSON.parse(config.Targets[0].Input));
 			})
-			.then(done, done.fail);
+			.then(() => done(), done.fail);
 		});
 		it('binds to an alias, if the version is provided', done => {
 			let functionArn;
@@ -183,7 +183,7 @@ describe('addScheduledEvent', () => {
 				expect(config.Targets[0].Arn).toEqual(functionArn);
 				expect(eventConfig).toEqual(JSON.parse(config.Targets[0].Input));
 			})
-			.then(done, done.fail);
+			.then(() => done(), done.fail);
 		});
 	});
 });

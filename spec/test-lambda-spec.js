@@ -17,7 +17,7 @@ describe('testLambda', () => {
 		fs.mkdirSync(workingdir);
 	});
 	afterEach(done => {
-		destroyObjects(newObjects).then(done, done.fail);
+		destroyObjects(newObjects).then(() => done(), done.fail);
 	});
 	it('fails when the source dir does not contain the project config file', done => {
 		underTest({source: workingdir}).then(done.fail, reason => {

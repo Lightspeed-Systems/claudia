@@ -22,7 +22,7 @@ describe('tag', () => {
 		fsUtil.copy('spec/test-projects/hello-world', workingdir, true);
 	});
 	afterEach(done => {
-		destroyObjects(newObjects).then(done, done.fail);
+		destroyObjects(newObjects).then(() => done(), done.fail);
 	});
 	it('fails when the source dir does not contain the project config file', done => {
 		underTest({tags: 'Team=onboarding'})
@@ -46,7 +46,7 @@ describe('tag', () => {
 			return lambda.send(new ListTagsCommand({ Resource: lambdaResult.FunctionArn }));
 		})
 		.then(data => expect(data.Tags).toEqual({ Team: 'onboarding' }))
-		.then(done, done.fail);
+		.then(() => done(), done.fail);
 	});
 	it('appends tags from csv to lambda and associated web api', done => {
 		fsUtil.copy('spec/test-projects/api-gw-hello-world', workingdir, true);
@@ -71,6 +71,6 @@ describe('tag', () => {
 			});
 		})
 		.then(data => expect(data.tags).toEqual({ Team: 'onboarding' }))
-		.then(done, done.fail);
+		.then(() => done(), done.fail);
 	});
 });

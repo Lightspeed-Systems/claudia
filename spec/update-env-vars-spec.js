@@ -19,7 +19,7 @@ describe('updateEnvVars', () => {
 	it('does not invoke the lambda method if no env options are provided', done => {
 		updateEnvVars({a: 'b'}, fakeLambdaAPI, 'MyFunc').then(() => {
 			expect(fakeLambdaAPI.updateFunctionConfiguration).not.toHaveBeenCalled();
-		}).then(done, done.fail);
+		}).then(() => done(), done.fail);
 	});
 	it('sets only the KMS key if it is the only option', done => {
 		updateEnvVars({a: 'b', 'env-kms-key-arn': 'A:B:C'}, fakeLambdaAPI, 'MyFunc').then(() => {
@@ -27,7 +27,7 @@ describe('updateEnvVars', () => {
 				FunctionName: 'MyFunc',
 				KMSKeyArn: 'A:B:C'
 			});
-		}).then(done, done.fail);
+		}).then(() => done(), done.fail);
 	});
 	describe('set-env', () => {
 		it('sets the variables', done => {
@@ -41,7 +41,7 @@ describe('updateEnvVars', () => {
 						}
 					}
 				});
-			}).then(done, done.fail);
+			}).then(() => done(), done.fail);
 		});
 		it('ignores existing variables', done => {
 			updateEnvVars({a: 'b', 'set-env': 'A=B,C=D'}, fakeLambdaAPI, 'MyFunc', {old: 'D'}).then(() => {
@@ -54,7 +54,7 @@ describe('updateEnvVars', () => {
 						}
 					}
 				});
-			}).then(done, done.fail);
+			}).then(() => done(), done.fail);
 		});
 	});
 	describe('update-env', () => {
@@ -70,7 +70,7 @@ describe('updateEnvVars', () => {
 						}
 					}
 				});
-			}).then(done, done.fail);
+			}).then(() => done(), done.fail);
 		});
 		it('updates if no old variables', done => {
 			updateEnvVars({a: 'b', 'update-env': 'A=B,C=D'}, fakeLambdaAPI, 'MyFunc').then(() => {
@@ -83,7 +83,7 @@ describe('updateEnvVars', () => {
 						}
 					}
 				});
-			}).then(done, done.fail);
+			}).then(() => done(), done.fail);
 		});
 	});
 	describe('set-env-from-json', () => {
@@ -101,7 +101,7 @@ describe('updateEnvVars', () => {
 						}
 					}
 				});
-			}).then(done, done.fail);
+			}).then(() => done(), done.fail);
 		});
 		it('ignores any existing variables', done => {
 			const envpath = tmppath();
@@ -116,7 +116,7 @@ describe('updateEnvVars', () => {
 						}
 					}
 				});
-			}).then(done, done.fail);
+			}).then(() => done(), done.fail);
 		});
 	});
 	describe('update-env-from-json', () => {
@@ -133,7 +133,7 @@ describe('updateEnvVars', () => {
 						}
 					}
 				});
-			}).then(done, done.fail);
+			}).then(() => done(), done.fail);
 		});
 		it('merges with old variables', done => {
 			const envpath = tmppath();
@@ -149,7 +149,7 @@ describe('updateEnvVars', () => {
 						}
 					}
 				});
-			}).then(done, done.fail);
+			}).then(() => done(), done.fail);
 
 		});
 
@@ -167,6 +167,6 @@ describe('updateEnvVars', () => {
 					}
 				}
 			});
-		}).then(done, done.fail);
+		}).then(() => done(), done.fail);
 	});
 });

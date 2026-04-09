@@ -21,13 +21,13 @@ describe('addPolicy', () => {
 			AssumeRolePolicyDocument: lambdaRolePolicy()
 		}))
 		.then(() => fsPromise.mkdirAsync(workingdir))
-		.then(done, done.fail);
+		.then(() => done(), done.fail);
 	});
 	afterEach((done) => {
 		destroyObjects({
 			workingdir: workingdir,
 			lambdaRole: testRunName
-		}).then(done, done.fail);
+		}).then(() => done(), done.fail);
 	});
 	it('appends a policy from a file to the role', done => {
 		const policyPath = path.join(workingdir, 'policy1.json');
@@ -44,6 +44,6 @@ describe('addPolicy', () => {
 				expectedPolicy = JSON.parse(loggingPolicy('aws'));
 			expect(parsedPolicy).toEqual(expectedPolicy);
 		})
-		.then(done, done.fail);
+		.then(() => done(), done.fail);
 	});
 });

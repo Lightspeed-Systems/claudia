@@ -13,14 +13,16 @@
  * spec_files list below so it is included in the unit test run.
  */
 const Jasmine = require('jasmine'),
-	SpecReporter = require('jasmine-spec-reporter'),
+	{ SpecReporter } = require('jasmine-spec-reporter'),
 	jrunner = new Jasmine();
 
 'use strict';
 
-jasmine.getEnv().clearReporters();
-jasmine.getEnv().addReporter(new SpecReporter({
-	displayStacktrace: 'all'
+jrunner.env.clearReporters();
+jrunner.env.addReporter(new SpecReporter({
+	spec: {
+		displayStacktrace: 'raw'
+	}
 }));
 
 jrunner.loadConfig({
@@ -58,9 +60,7 @@ jrunner.loadConfig({
 	'helpers': []
 });
 
-jrunner.onComplete(function (passed) {
+jrunner.execute().then((result) => {
 	'use strict';
-	process.exit(passed ? 0 : 1);
+	process.exit(result.overallStatus === 'passed' ? 0 : 1);
 });
-
-jrunner.execute();

@@ -30,7 +30,7 @@ describe('packProjectToTar', () => {
 				files: ['root.txt', 'subdir']
 			}), 'utf8');
 		})
-		.then(done, done.fail);
+		.then(() => done(), done.fail);
 
 	});
 	afterEach(() => {
@@ -45,14 +45,14 @@ describe('packProjectToTar', () => {
 			expect(fsUtil.isDir(path.join(unpackdir, 'package', 'subdir'))).toBeTruthy();
 			expect(fsUtil.fileExists(path.join(unpackdir, 'package', 'subdir', 'sub.txt'))).toBeTruthy();
 		})
-		.then(done, done.fail);
+		.then(() => done(), done.fail);
 	});
 	it('creates the archive in a subdir of the working dir', done => {
 		packProjectToTar(sourcedir, workingdir, [], logger)
 		.then(archive => {
 			expect(path.dirname(path.dirname(archive))).toEqual(workingdir);
 		})
-		.then(done, done.fail);
+		.then(() => done(), done.fail);
 	});
 	it('logs NPM commands', done => {
 		packProjectToTar(sourcedir, workingdir, [], logger)
@@ -61,6 +61,6 @@ describe('packProjectToTar', () => {
 				['call', `npm pack -q ${sourcedir}`]
 			]);
 		})
-		.then(done, done.fail);
+		.then(() => done(), done.fail);
 	});
 });

@@ -15,7 +15,7 @@ describe('initEnvVarsFromOptions', () => {
 				expect(result).toBeUndefined();
 				expect(cloneEnv()).toEqual(oldEnv);
 			})
-			.then(done, done.fail);
+			.then(() => done(), done.fail);
 	});
 	it('should resolve with undefined if empty options', done => {
 		initEnvVarsFromOptions({})
@@ -23,7 +23,7 @@ describe('initEnvVarsFromOptions', () => {
 				expect(result).toBeUndefined();
 				expect(cloneEnv()).toEqual(oldEnv);
 			})
-			.then(done, done.fail);
+			.then(() => done(), done.fail);
 	});
 	it('should resolve with undefined if options do not contain env', done => {
 		initEnvVarsFromOptions({ignoreMe: 'yes'})
@@ -31,7 +31,7 @@ describe('initEnvVarsFromOptions', () => {
 				expect(result).toBeUndefined();
 				expect(cloneEnv()).toEqual(oldEnv);
 			})
-			.then(done, done.fail);
+			.then(() => done(), done.fail);
 
 	});
 	it('throws an error when loading env vars fails', done => {
@@ -40,7 +40,7 @@ describe('initEnvVarsFromOptions', () => {
 		}).then(done.fail, reason => {
 			expect(reason).toMatch(/no such file or directory/);
 			expect(cloneEnv()).toEqual(oldEnv);
-		}).then(done, done.fail);
+		}).then(() => done(), done.fail);
 	});
 	it('resolves with key-value pairs from set-env and extends the process.env', done => {
 		initEnvVarsFromOptions({ 'set-env': 'XPATH=/var/www,YPATH=/var/lib' })
@@ -56,6 +56,6 @@ describe('initEnvVarsFromOptions', () => {
 				expect(newEnv.XPATH).toEqual('/var/www');
 				expect(newEnv.YPATH).toEqual('/var/lib');
 
-			}).then(done, done.fail);
+			}).then(() => done(), done.fail);
 	});
 });

@@ -19,7 +19,7 @@ describe('allowAlexaSkillTrigger', () => {
 		fs.mkdirSync(workingdir);
 	});
 	afterEach(done => {
-		destroyObjects(newObjects).then(done, done.fail);
+		destroyObjects(newObjects).then(() => done(), done.fail);
 	});
 	it('allows Alexa Skill to trigger Lambda', done => {
 		const createConfig = {
@@ -47,6 +47,6 @@ describe('allowAlexaSkillTrigger', () => {
 				expect(statement.Principal.Service).toEqual('alexa-appkit.amazon.com');
 				expect(statement.Action).toEqual('lambda:InvokeFunction');
 			})
-			.then(done, done.fail);
+			.then(() => done(), done.fail);
 	});
 });

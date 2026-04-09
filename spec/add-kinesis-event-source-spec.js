@@ -38,7 +38,7 @@ describe('addKinesisEventSource', () => {
 		})
 		.then(streamDesc => streamDescription = streamDesc)
 		.then(() => console.log('created the kinesis stream'))
-		.then(done, done.fail);
+		.then(() => done(), done.fail);
 	});
 	afterAll((done) => {
 		console.log('deleting the kinesis stream');
@@ -46,7 +46,7 @@ describe('addKinesisEventSource', () => {
 			StreamName: streamName
 		}))
 		.then(() => console.log('deleted the kinesis stream'))
-		.then(done, done.fail);
+		.then(() => done(), done.fail);
 	});
 	beforeEach(() => {
 		workingdir = tmppath();
@@ -63,7 +63,7 @@ describe('addKinesisEventSource', () => {
 		};
 	});
 	afterEach(done => {
-		destroyObjects(newObjects).then(done, done.fail);
+		destroyObjects(newObjects).then(() => done(), done.fail);
 	});
 	it('fails when the stream is not defined in options', done => {
 		config.stream = '';
@@ -125,7 +125,7 @@ describe('addKinesisEventSource', () => {
 				expect(config.EventSourceMappings[0].FunctionArn).toMatch(new RegExp(testRunName + '$'));
 				expect(config.EventSourceMappings[0].EventSourceArn).toEqual(streamDescription.StreamARN);
 			})
-			.then(done, done.fail);
+			.then(() => done(), done.fail);
 		});
 		it('sets up stream using an ARN', done => {
 			config.stream = streamDescription.StreamARN;
@@ -135,7 +135,7 @@ describe('addKinesisEventSource', () => {
 			.then(config => {
 				expect(config.EventSourceMappings[0].EventSourceArn).toEqual(streamDescription.StreamARN);
 			})
-			.then(done, done.fail);
+			.then(() => done(), done.fail);
 		});
 		it('invokes lambda from Kinesis when no version is given', done => {
 			createLambda()
@@ -154,7 +154,7 @@ describe('addKinesisEventSource', () => {
 						});
 				}, 30000, 10, undefined, undefined, Promise);
 			})
-			.then(done, done.fail);
+			.then(() => done(), done.fail);
 		});
 		it('binds to an alias, if the version is provided', done => {
 			createConfig.version = 'special';
@@ -168,7 +168,7 @@ describe('addKinesisEventSource', () => {
 				expect(config.EventSourceMappings[0].FunctionArn).toMatch(new RegExp(testRunName + ':special$'));
 				expect(config.EventSourceMappings[0].EventSourceArn).toEqual(streamDescription.StreamARN);
 			})
-			.then(done, done.fail);
+			.then(() => done(), done.fail);
 		});
 		it('sets up batch size', done => {
 			config['batch-size'] = 50;
@@ -179,7 +179,7 @@ describe('addKinesisEventSource', () => {
 				expect(config.EventSourceMappings.length).toBe(1);
 				expect(config.EventSourceMappings[0].BatchSize).toEqual(50);
 			})
-			.then(done, done.fail);
+			.then(() => done(), done.fail);
 		});
 
 		it('invokes lambda from Kinesis when version is provided', done => {
@@ -201,7 +201,7 @@ describe('addKinesisEventSource', () => {
 						});
 				}, 30000, 10, undefined, undefined, Promise);
 			})
-			.then(done, done.fail);
+			.then(() => done(), done.fail);
 		});
 	});
 });

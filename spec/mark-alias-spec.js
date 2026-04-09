@@ -19,7 +19,7 @@ describe('markAlias', () => {
 	});
 	afterEach(done => {
 		destroyObjects(newObjects)
-		.then(done, done.fail);
+		.then(() => done(), done.fail);
 	});
 	describe('when the lambda project exists', () => {
 		beforeEach(done => {
@@ -29,13 +29,13 @@ describe('markAlias', () => {
 				newObjects.lambdaRole = result.lambda && result.lambda.role;
 				newObjects.lambdaFunction = result.lambda && result.lambda.name;
 			})
-			.then(done, done.fail);
+			.then(() => done(), done.fail);
 		});
 		it('creates a new version alias of the lambda function', done => {
 			underTest(testRunName, lambda, '1', 'testver')
 			.then(() => lambda.send(new GetAliasCommand({ FunctionName: testRunName, Name: 'testver' })))
 			.then(result => expect(result.FunctionVersion).toEqual('1'))
-			.then(done, done.fail);
+			.then(() => done(), done.fail);
 		});
 		it('migrates an alias if it already exists', done => {
 			fsUtil.copy('spec/test-projects/echo', workingdir, true);
@@ -48,7 +48,7 @@ describe('markAlias', () => {
 			.then(() => underTest(testRunName, lambda, '2', 'testver'))
 			.then(() => lambda.send(new GetAliasCommand({ FunctionName: testRunName, Name: 'testver' })))
 			.then(result => expect(result.FunctionVersion).toEqual('2'))
-			.then(done, done.fail);
+			.then(() => done(), done.fail);
 		});
 	});
 });

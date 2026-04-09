@@ -36,7 +36,7 @@ describe('addIOTTopicRuleEventSource', () => {
 		};
 	});
 	afterEach(done => {
-		destroyObjects(newObjects).then(done, done.fail);
+		destroyObjects(newObjects).then(() => done(), done.fail);
 	});
 	it('fails when the topic is not defined in options', done => {
 		config.sql = '';
@@ -95,7 +95,7 @@ describe('addIOTTopicRuleEventSource', () => {
 				expect(topicRule.rule.awsIotSqlVersion).toEqual('2015-10-08');
 				expect(topicRule.rule.actions).toEqual([{lambda: { functionArn: functionArn } }]);
 			})
-			.then(done, done.fail);
+			.then(() => done(), done.fail);
 		});
 
 		it('invokes lambda from IOT when no version is given', done => {
@@ -107,7 +107,7 @@ describe('addIOTTopicRuleEventSource', () => {
 			.then(events => {
 				expect(events.length).toEqual(1);
 			})
-			.then(done, done.fail);
+			.then(() => done(), done.fail);
 		});
 		it('sets up the rule name, sql version and description if provided', done => {
 			let functionArn;
@@ -129,7 +129,7 @@ describe('addIOTTopicRuleEventSource', () => {
 				expect(topicRule.rule.actions).toEqual([{lambda: { functionArn: functionArn } }]);
 				expect(topicRule.rule.description).toEqual('test-rule-description');
 			})
-			.then(done, done.fail);
+			.then(() => done(), done.fail);
 
 		});
 		it('binds to an alias, if the version is provided', done => {
@@ -149,7 +149,7 @@ describe('addIOTTopicRuleEventSource', () => {
 				expect(topicRule.rule.actions).toEqual([{lambda: { functionArn: functionArn } }]);
 				expect(topicRule.rule.actions[0].lambda.functionArn).toMatch(/:special$/);
 			})
-			.then(done, done.fail);
+			.then(() => done(), done.fail);
 		});
 	});
 });

@@ -27,7 +27,7 @@ describe('addSNSEventSource', () => {
 		};
 	});
 	afterEach(done => {
-		destroyObjects(newObjects).then(done, done.fail);
+		destroyObjects(newObjects).then(() => done(), done.fail);
 	});
 	it('fails when the topic is not defined in options', done => {
 		config.topic = '';
@@ -89,7 +89,7 @@ describe('addSNSEventSource', () => {
 				newObjects.snsTopic = result.TopicArn;
 				config.topic = result.TopicArn;
 			})
-			.then(done);
+			.then(() => done());
 		});
 		it('sets up privileges and rule notifications if no version given', done => {
 			let functionArn;
@@ -108,7 +108,7 @@ describe('addSNSEventSource', () => {
 				expect(config.Subscriptions.length).toBe(1);
 				expect(config.Subscriptions[0].Endpoint).toEqual(functionArn);
 			})
-			.then(done, done.fail);
+			.then(() => done(), done.fail);
 		});
 		it('does not add a filter policy if not requested', done =>	{
 			createLambda()
@@ -118,7 +118,7 @@ describe('addSNSEventSource', () => {
 			.then(attr => {
 				expect(attr.Attributes.FilterPolicy).toBeFalsy();
 			})
-			.then(done, done.fail);
+			.then(() => done(), done.fail);
 		});
 
 		it('adds a filter policy if requested', done =>	{
@@ -133,7 +133,7 @@ describe('addSNSEventSource', () => {
 			.then(attr => {
 				expect(JSON.parse(attr.Attributes.FilterPolicy)).toEqual(policy);
 			})
-			.then(done, done.fail);
+			.then(() => done(), done.fail);
 		});
 		it('adds a filter policy from a file if requested', done =>	{
 			const policy = {
@@ -149,7 +149,7 @@ describe('addSNSEventSource', () => {
 			.then(attr => {
 				expect(JSON.parse(attr.Attributes.FilterPolicy)).toEqual(policy);
 			})
-			.then(done, done.fail);
+			.then(() => done(), done.fail);
 		});
 		it('invokes lambda from SNS when no version is given', done => {
 			createLambda()
@@ -173,7 +173,7 @@ describe('addSNSEventSource', () => {
 						});
 				}, 5000, 5, undefined, undefined, Promise);
 			})
-			.then(done, done.fail);
+			.then(() => done(), done.fail);
 		});
 		it('binds to an alias, if the version is provided', done => {
 			let functionArn;
@@ -195,7 +195,7 @@ describe('addSNSEventSource', () => {
 				expect(config.Subscriptions.length).toBe(1);
 				expect(config.Subscriptions[0].Endpoint).toEqual(functionArn);
 			})
-			.then(done, done.fail);
+			.then(() => done(), done.fail);
 		});
 		it('invokes lambda from SNS when version is provided', done => {
 			createConfig.version = 'special';
@@ -221,7 +221,7 @@ describe('addSNSEventSource', () => {
 						});
 				}, 5000, 5);
 			})
-			.then(done, done.fail);
+			.then(() => done(), done.fail);
 		});
 	});
 });

@@ -19,19 +19,19 @@ describe('destroyRole', () => {
 			PolicyName: 'log-writer',
 			PolicyDocument: loggingPolicy('aws')
 		})))
-		.then(done, done.fail);
+		.then(() => done(), done.fail);
 	});
 	it('destroys the role', done => {
 		underTest(iam, testRunName)
 		.then(() => iam.send(new GetRoleCommand({ RoleName: testRunName })))
 		.catch(expectedException => expect(expectedException.name).toEqual('NoSuchEntityException'))
-		.then(done, done.fail);
+		.then(() => done(), done.fail);
 	});
 	it('destroys the policies', done => {
 		underTest(iam, testRunName)
 		.then(() => iam.send(new ListRolePoliciesCommand({ RoleName: testRunName })))
 		.catch(expectedException => expect(expectedException.message).toContain(testRunName))
-		.then(done, done.fail);
+		.then(() => done(), done.fail);
 	});
 	it('destroys a role with attached policies', done => {
 		iam.send(new AttachRolePolicyCommand({
@@ -41,6 +41,6 @@ describe('destroyRole', () => {
 		.then(() => underTest(iam, testRunName))
 		.then(() => iam.send(new GetRoleCommand({ RoleName: testRunName })))
 		.catch(expectedException => expect(expectedException.name).toEqual('NoSuchEntityException'))
-		.then(done, done.fail);
+		.then(() => done(), done.fail);
 	});
 });

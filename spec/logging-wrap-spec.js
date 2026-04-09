@@ -45,6 +45,6 @@ describe('loggingWrap', () => {
 			expect(callerIdentity.Account).not.toBeUndefined();
 			expect(logger).toHaveBeenCalledWith('sts.GetCallerIdentityCommand', [{}]);
 		})
-		.then(done, done.fail);
+		.then(() => done(), done.fail);
 	});
 });

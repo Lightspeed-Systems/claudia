@@ -55,7 +55,7 @@ describe('cognitoAuthorizers', () => {
 					resolveErrors: false
 				})
 				.then(response => expect(JSON.parse(response.body)).toEqual('OK'))
-				.then(done, done.fail);
+				.then(() => done(), done.fail);
 			});
 			it('blocks access to methods with a cognito authorizer without authentication headers', done => {
 				invoke(version + '/locked', {
@@ -67,7 +67,7 @@ describe('cognitoAuthorizers', () => {
 					expect(response.headers['x-amzn-errortype']).toEqual('UnauthorizedException');
 					expect(JSON.parse(response.body)).toEqual({ message: 'Unauthorized' });
 				})
-				.then(done, done.fail);
+				.then(() => done(), done.fail);
 			});
 			it('blocks access to methods with a cognito authorizer for users with an invalid token', done => {
 				invoke(version + '/locked', {
@@ -80,7 +80,7 @@ describe('cognitoAuthorizers', () => {
 					expect(response.headers['x-amzn-errortype']).toEqual('UnauthorizedException');
 					expect(JSON.parse(response.body)).toEqual({ message: 'Unauthorized' });
 				})
-				.then(done, done.fail);
+				.then(() => done(), done.fail);
 			});
 			it('allows access to methods with a cognito authorizer for authorized users', done => {
 				invoke(version + '/unlocked', {
@@ -89,7 +89,7 @@ describe('cognitoAuthorizers', () => {
 					resolveErrors: false
 				})
 				.then(response => expect(JSON.parse(response.body)).toEqual('OK for Bob-123'))
-				.then(done, done.fail);
+				.then(() => done(), done.fail);
 			});
 		};
 
@@ -99,7 +99,7 @@ describe('cognitoAuthorizers', () => {
 			.then(createTestFixture)
 			.then(() => waitUntilDeployed('original'))
 			.then(() => console.log('created'))
-			.then(done, done.fail);
+			.then(() => done(), done.fail);
 	});
 	afterAll(done => {
 		console.log('destroying cognito authorizer examples');
@@ -108,7 +108,7 @@ describe('cognitoAuthorizers', () => {
 			.then(() => fsUtil.rmDir(workingdir))
 			.then(() => console.log('destroyed'))
 			.catch(err => console.log('error cleaning up', err))
-			.then(done);
+			.then(() => done());
 	});
 
 	describe('create wires up a cognito authorizer initially', () => {
@@ -120,7 +120,7 @@ describe('cognitoAuthorizers', () => {
 			update({ source: workingdir, config: path.join(workingdir, 'claudia-api.json'), version: 'new' })
 				.then(() => waitUntilDeployed('new'))
 				.then(() => console.log('updated'))
-				.then(done, err => {
+				.then(() => done(), err => {
 					console.log('failed to update authorizer examples', err);
 					done.fail();
 				});

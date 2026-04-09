@@ -57,7 +57,7 @@ describe('cognitoOauth2Scopes', () => {
 			.then(createTestFixture)
 			.then(() => waitUntilDeployed('original'))
 			.then(() => console.log('created'))
-			.then(done, done.fail);
+			.then(() => done(), done.fail);
 	});
 	afterAll(done => {
 		console.log('destroying cognito authorizer examples');
@@ -66,7 +66,7 @@ describe('cognitoOauth2Scopes', () => {
 			.then(() => fsUtil.rmDir(workingdir))
 			.then(() => console.log('destroyed'))
 			.catch(err => console.log('error cleaning up', err))
-			.then(done);
+			.then(() => done());
 	});
 
 	describe('create wires up a cognito OAuth2 authorizer', () => {
@@ -82,7 +82,7 @@ describe('cognitoOauth2Scopes', () => {
 					};
 				apiGateway.send(new GetMethodCommand(params))
 				.then(response => expect(response.authorizationScopes).toEqual(['email', 'openid']))
-				.then(done, done.fail);
+				.then(() => done(), done.fail);
 			});
 		});
 	});

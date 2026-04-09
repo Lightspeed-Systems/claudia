@@ -19,7 +19,7 @@ describe('fsPromise', () => {
 			fs.writeFileSync(filePath, 'fileContents-123', 'utf8');
 			fsPromise.readFileAsync(filePath, 'utf8')
 			.then(contents => expect(contents).toEqual('fileContents-123'))
-			.then(done, done.fail);
+			.then(() => done(), done.fail);
 		});
 		it('fails if no file', done => {
 			fsPromise.readFileAsync(filePath, 'utf8')
@@ -33,7 +33,7 @@ describe('fsPromise', () => {
 				const contents = fs.readFileSync(filePath, 'utf8');
 				expect(contents).toEqual('fileContents-123');
 			})
-			.then(done, done.fail);
+			.then(() => done(), done.fail);
 		});
 	});
 	describe('unlinkAsync', () => {
@@ -62,7 +62,7 @@ describe('fsPromise', () => {
 				expect(path.resolve(path.dirname(result))).toEqual(path.resolve(workingdir));
 				expect(path.basename(result)).toMatch(/^test1/);
 			})
-			.then(done, done.fail);
+			.then(() => done(), done.fail);
 		});
 	});
 	describe('statAsync', () => {
@@ -73,7 +73,7 @@ describe('fsPromise', () => {
 				expect(stat.isDirectory()).toBeFalsy();
 				expect(stat.isFile()).toBeTruthy();
 			})
-			.then(done, done.fail);
+			.then(() => done(), done.fail);
 		});
 	});
 	describe('chmodAsync', () => {
@@ -82,7 +82,7 @@ describe('fsPromise', () => {
 			.then(() => fsPromise.chmodAsync(filePath, 0o755))
 			.then(() => fs.statSync(filePath))
 			.then(stats => expect(stats.mode & 0o777).toEqual(0o755))
-			.then(done, done.fail);
+			.then(() => done(), done.fail);
 		});
 	});
 });

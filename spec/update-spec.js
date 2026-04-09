@@ -44,7 +44,7 @@ describe('update', () => {
 		fs.mkdirSync(workingdir);
 	});
 	afterEach(done => {
-		destroyObjects(newObjects).then(done, done.fail);
+		destroyObjects(newObjects).then(() => done(), done.fail);
 	});
 	it('fails when the source dir does not contain the project config file', done => {
 		underTest({source: workingdir}).then(done.fail, reason => {
@@ -111,7 +111,7 @@ describe('update', () => {
 				newObjects.lambdaRole = result.lambda && result.lambda.role;
 				newObjects.lambdaFunction = result.lambda && result.lambda.name;
 				fsUtil.copy('spec/test-projects/echo', workingdir, true);
-			}).then(done, done.fail);
+			}).then(() => done(), done.fail);
 		});
 		it('fails if the lambda no longer exists', done => {
 			fsPromise.readFileAsync(path.join(workingdir, 'claudia.json'), 'utf8')
@@ -126,7 +126,7 @@ describe('update', () => {
 				return underTest({source: workingdir});
 			}).then(done.fail, reason => {
 				expect(reason.name).toEqual('ResourceNotFoundException');
-			}).then(done);
+			}).then(() => done());
 		});
 		it('validates the package before updating the lambda', done => {
 			fsUtil.copy('spec/test-projects/echo-dependency-problem', workingdir, true);
@@ -137,7 +137,7 @@ describe('update', () => {
 				return lambda.send(new ListVersionsByFunctionCommand({FunctionName: testRunName}));
 			}).then(result => {
 				expect(result.Versions.length).toEqual(2);
-			}).then(done, done.fail);
+			}).then(() => done(), done.fail);
 		});
 		it('creates a new version of the lambda function', done => {
 			underTest({source: workingdir}).then(lambdaFunc => {
@@ -149,7 +149,7 @@ describe('update', () => {
 				expect(result.Versions[0].Version).toEqual('$LATEST');
 				expect(result.Versions[1].Version).toEqual('1');
 				expect(result.Versions[2].Version).toEqual('2');
-			}).then(done, done.fail);
+			}).then(() => done(), done.fail);
 		});
 		it('updates the lambda with a new version', done => {
 			underTest({source: workingdir}).then(() => {
@@ -157,14 +157,14 @@ describe('update', () => {
 			}).then(lambdaResult => {
 				expect(lambdaResult.StatusCode).toEqual(200);
 				expect(lambdaResult.Payload).toEqual('{"message":"aloha"}');
-			}).then(done, done.fail);
+			}).then(() => done(), done.fail);
 		});
 
 		it('keeps the archive on the disk if --keep is specified', done => {
 			underTest({source: workingdir, keep: true}).then(result => {
 				expect(result.archive).toBeTruthy();
 				expect(fsUtil.isFile(result.archive)).toBeTruthy();
-			}).then(done, done.fail);
+			}).then(() => done(), done.fail);
 		});
 
 		it('uses local dependencies if requested', done => {
@@ -178,7 +178,7 @@ describe('update', () => {
 			}).then(lambdaResult => {
 				expect(lambdaResult.StatusCode).toEqual(200);
 				expect(lambdaResult.Payload).toEqual('"hello local"');
-			}).then(done, done.fail);
+			}).then(() => done(), done.fail);
 		});
 		it('removes optional dependencies after validation if requested', done => {
 			fsUtil.copy(path.join(__dirname, '/test-projects/optional-dependencies'), workingdir, true);
@@ -187,7 +187,7 @@ describe('update', () => {
 			}).then(lambdaResult => {
 				expect(lambdaResult.StatusCode).toEqual(200);
 				expect(JSON.parse(lambdaResult.Payload).modules.filter(t => !t.startsWith('.'))).toEqual(['huh']);
-			}).then(done, done.fail);
+			}).then(() => done(), done.fail);
 		});
 		it('rewires relative dependencies to reference original location after copy', done => {
 			fsUtil.copy(path.join(__dirname, 'test-projects/relative-dependencies'), workingdir, true);
@@ -197,7 +197,7 @@ describe('update', () => {
 			}).then(lambdaResult => {
 				expect(lambdaResult.StatusCode).toEqual(200);
 				expect(lambdaResult.Payload).toEqual('"hello relative"');
-			}).then(done, done.fail);
+			}).then(() => done(), done.fail);
 		});
 
 		it('uses a s3 bucket if provided', done => {
@@ -227,7 +227,7 @@ describe('update', () => {
 			}).then(lambdaResult => {
 				expect(lambdaResult.StatusCode).toEqual(200);
 				expect(lambdaResult.Payload).toEqual('{"message":"aloha"}');
-			}).then(done, done.fail);
+			}).then(() => done(), done.fail);
 		});
 
 		it('uses a s3 bucket with server side encryption if provided', done => {
@@ -292,7 +292,7 @@ describe('update', () => {
 			}).then(lambdaResult => {
 				expect(lambdaResult.StatusCode).toEqual(200);
 				expect(lambdaResult.Payload).toEqual('{"message":"aloha"}');
-			}).then(done, done.fail);
+			}).then(() => done(), done.fail);
 		});
 
 		it('uses an s3 key if provided', done => {
@@ -324,7 +324,7 @@ describe('update', () => {
 			}).then(lambdaResult => {
 				expect(lambdaResult.StatusCode).toEqual(200);
 				expect(lambdaResult.Payload).toEqual('{"message":"aloha"}');
-			}).then(done, done.fail);
+			}).then(() => done(), done.fail);
 		});
 
 		it('adds the version alias if supplied', done => {
@@ -332,7 +332,7 @@ describe('update', () => {
 				return lambda.send(new GetAliasCommand({FunctionName: testRunName, Name: 'great'}));
 			}).then(result => {
 				expect(result.FunctionVersion).toEqual('2');
-			}).then(done, done.fail);
+			}).then(() => done(), done.fail);
 		});
 
 		it('checks the current dir if the source is not provided', done => {
@@ -341,7 +341,7 @@ describe('update', () => {
 				expect(new RegExp('^arn:aws:lambda:' + awsRegion + ':[0-9]+:function:' + testRunName + ':2$').test(lambdaFunc.FunctionArn)).toBeTruthy();
 				expect(lambdaFunc.FunctionName).toEqual(testRunName);
 				return lambda.send(new InvokeCommand({FunctionName: testRunName, Payload: JSON.stringify({message: 'aloha'})}));
-			}).then(done, done.fail);
+			}).then(() => done(), done.fail);
 		});
 	});
 	describe('when the lambda project contains a proxy api', () => {
@@ -351,7 +351,7 @@ describe('update', () => {
 				newObjects.lambdaRole = result.lambda && result.lambda.role;
 				newObjects.lambdaFunction = result.lambda && result.lambda.name;
 				newObjects.restApi = result.api && result.api.id;
-			}).then(done, done.fail);
+			}).then(() => done(), done.fail);
 		});
 		it('if using a different version, deploys a new stage', done => {
 			underTest({source: workingdir, version: 'development'}).then(result => {
@@ -364,7 +364,7 @@ describe('update', () => {
 				expect(params.requestContext.httpMethod).toEqual('GET');
 				expect(params.path).toEqual('/hello');
 				expect(params.requestContext.stage).toEqual('development');
-			}).then(done, e => {
+			}).then(() => done(), e => {
 				console.log(e);
 				done.fail();
 			});
@@ -384,7 +384,7 @@ describe('update', () => {
 				newObjects.lambdaFunction = result.lambda && result.lambda.name;
 				newObjects.restApi = result.api && result.api.id;
 				fsUtil.copy(path.join(originaldir, 'claudia.json'), updateddir);
-			}).then(done, done.fail);
+			}).then(() => done(), done.fail);
 		});
 		it('fails if the api no longer exists', done => {
 			fsPromise.readFileAsync(path.join(updateddir, 'claudia.json'), 'utf8')
@@ -405,7 +405,7 @@ describe('update', () => {
 				expect(result.Versions.length).toEqual(2);
 				expect(result.Versions[0].Version).toEqual('$LATEST');
 				expect(result.Versions[1].Version).toEqual('1');
-			}).then(done, done.fail);
+			}).then(() => done(), done.fail);
 		});
 		it('validates the package before creating a new lambda version', done => {
 			fsUtil.copy('spec/test-projects/echo-dependency-problem', updateddir, true);
@@ -417,7 +417,7 @@ describe('update', () => {
 				expect(result.Versions.length).toEqual(2);
 				expect(result.Versions[0].Version).toEqual('$LATEST');
 				expect(result.Versions[1].Version).toEqual('1');
-			}).then(done, done.fail);
+			}).then(() => done(), done.fail);
 		});
 
 
@@ -434,7 +434,7 @@ describe('update', () => {
 				expect(params.stageVariables).toEqual({
 					lambdaVersion: 'latest'
 				});
-			}).then(done, done.fail);
+			}).then(() => done(), done.fail);
 		});
 		it('upgrades the function handler from 1.x', done => {
 			lambda.send(new UpdateFunctionConfigurationCommand({
@@ -454,7 +454,7 @@ describe('update', () => {
 				expect(params.stageVariables).toEqual({
 					lambdaVersion: 'latest'
 				});
-			}).then(done, done.fail);
+			}).then(() => done(), done.fail);
 		});
 
 		it('works when the source is a relative path', done => {
@@ -472,13 +472,13 @@ describe('update', () => {
 				expect(params.stageVariables).toEqual({
 					lambdaVersion: 'latest'
 				});
-			}).then(done, done.fail);
+			}).then(() => done(), done.fail);
 		});
 
 		it('works with non-reentrant modules', done => {
 			global.MARKED = false;
 			fsUtil.copy('spec/test-projects/non-reentrant', updateddir, true);
-			underTest({source: updateddir}).then(done, done.fail);
+			underTest({source: updateddir}).then(() => done(), done.fail);
 		});
 		it('when the version is provided, creates the deployment with that name', done => {
 			underTest({source: updateddir, version: 'development'}).then(result => {
@@ -493,7 +493,7 @@ describe('update', () => {
 				expect(params.stageVariables).toEqual({
 					lambdaVersion: 'development'
 				});
-			}).then(done, done.fail);
+			}).then(() => done(), done.fail);
 		});
 		it('adds an api config cache if requested', done => {
 			underTest({source: updateddir, version: 'development', 'cache-api-config': 'claudiaConfig'}).then(result => {
@@ -509,14 +509,14 @@ describe('update', () => {
 					lambdaVersion: 'development',
 					claudiaConfig: '-EDMbG0OcNlCZzstFc2jH6rlpI1YDlNYc9YGGxUFuXo='
 				});
-			}).then(done, done.fail);
+			}).then(() => done(), done.fail);
 		});
 		it('if using a different version, leaves the old one intact', done => {
 			underTest({source: updateddir, version: 'development'}).then(() => {
 				return invoke('original/hello');
 			}).then(contents => {
 				expect(contents.body).toEqual('"hello world"');
-			}).then(done, done.fail);
+			}).then(() => done(), done.fail);
 		});
 		it('if using the same version, rewrites the old one', done => {
 			underTest({source: updateddir, version: 'original'}).then(() => {
@@ -529,7 +529,7 @@ describe('update', () => {
 				expect(params.stageVariables).toEqual({
 					lambdaVersion: 'original'
 				});
-			}).then(done, done.fail);
+			}).then(() => done(), done.fail);
 		});
 
 		it('executes post-deploy if provided with the api', done => {
@@ -557,7 +557,7 @@ describe('update', () => {
 					'postinstalloption': 'option-123',
 					'lambdaVersion': 'development'
 				});
-			}).then(done, e => {
+			}).then(() => done(), e => {
 				console.log(JSON.stringify(e));
 				done.fail();
 			});
@@ -581,7 +581,7 @@ describe('update', () => {
 				});
 			}).then(updateResult => {
 				expect(updateResult.deploy.wasApiCacheUsed).toBeTruthy();
-			}).then(done, done.fail);
+			}).then(() => done(), done.fail);
 		});
 	});
 	it('logs call execution', done => {
@@ -625,7 +625,7 @@ describe('update', () => {
 				'apigateway.putIntegrationResponse',
 				'apigateway.createDeployment'
 			]);
-		}).then(done, done.fail);
+		}).then(() => done(), done.fail);
 	});
 	describe('handler option support', () => {
 		beforeEach(done => {
@@ -633,7 +633,7 @@ describe('update', () => {
 			create({name: testRunName, timeout: 10, region: awsRegion, source: workingdir, handler: 'main.handler'}).then(result => {
 				newObjects.lambdaRole = result.lambda && result.lambda.role;
 				newObjects.lambdaFunction = result.lambda && result.lambda.name;
-			}).then(done, done.fail);
+			}).then(() => done(), done.fail);
 		});
 		it('does not change the handler if not provided', done => {
 			underTest({source: workingdir, version: 'new'})
@@ -641,7 +641,7 @@ describe('update', () => {
 			.then(configuration => expect(configuration.Handler).toEqual('main.handler'))
 			.then(() => getLambdaConfiguration())
 			.then(configuration => expect(configuration.Handler).toEqual('main.handler'))
-			.then(done, done.fail);
+			.then(() => done(), done.fail);
 		});
 		it('can specify the new handler --handler argument', done => {
 			fsUtil.copy('spec/test-projects/api-gw-echo', workingdir, true);
@@ -650,14 +650,14 @@ describe('update', () => {
 			.then(configuration => expect(configuration.Handler).toEqual('main.proxyRouter'))
 			.then(() => getLambdaConfiguration('new'))
 			.then(configuration => expect(configuration.Handler).toEqual('main.proxyRouter'))
-			.then(done, done.fail);
+			.then(() => done(), done.fail);
 		});
 		it('fails if the lambda code does not export the handler', done => {
 			underTest({source: workingdir, version: 'new', handler: 'main.proxyRouter'})
 			.then(() => done.fail('update succeeded'), error => expect(error).toEqual('main.js does not export method proxyRouter'))
 			.then(() => getLambdaConfiguration())
 			.then(configuration => expect(configuration.Handler).toEqual('main.handler'))
-			.then(done, done.fail);
+			.then(() => done(), done.fail);
 		});
 
 	});
@@ -668,7 +668,7 @@ describe('update', () => {
 			create({name: testRunName, timeout: 10, region: awsRegion, source: workingdir, handler: 'main.handler'}).then(result => {
 				newObjects.lambdaRole = result.lambda && result.lambda.role;
 				newObjects.lambdaFunction = result.lambda && result.lambda.name;
-			}).then(done, done.fail);
+			}).then(() => done(), done.fail);
 		});
 		it('does not change the timeout if not provided', done => {
 			underTest({source: workingdir, version: 'new'})
@@ -676,21 +676,21 @@ describe('update', () => {
 			.then(configuration => expect(configuration.Timeout).toEqual(10))
 			.then(() => getLambdaConfiguration())
 			.then(configuration => expect(configuration.Timeout).toEqual(10))
-			.then(done, done.fail);
+			.then(() => done(), done.fail);
 		});
 		it('fails if timeout value is < 1', done => {
 			underTest({source: workingdir, timeout: 0})
 			.then(() => done.fail('update succeeded'), error => expect(error).toEqual('the timeout value provided must be greater than or equal to 1'))
 			.then(() => getLambdaConfiguration())
 			.then(configuration => expect(configuration.Timeout).toEqual(10))
-			.then(done, done.fail);
+			.then(() => done(), done.fail);
 		});
 		it('fails if timeout value is > 900', done => {
 			underTest({source: workingdir, version: 'new', timeout: 901})
 			.then(() => done.fail('update succeeded'), error => expect(error).toEqual('the timeout value provided must be less than or equal to 900'))
 			.then(() => getLambdaConfiguration())
 			.then(configuration => expect(configuration.Timeout).toEqual(10))
-			.then(done, done.fail);
+			.then(() => done(), done.fail);
 		});
 		it('can specify timeout using the --timeout argument', done => {
 			underTest({source: workingdir, version: 'new', timeout: 40})
@@ -698,7 +698,7 @@ describe('update', () => {
 			.then(lambdaResult => expect(lambdaResult.Timeout).toEqual(40))
 			.then(() => getLambdaConfiguration('new'))
 			.then(lambdaResult => expect(lambdaResult.Timeout).toEqual(40))
-			.then(done, done.fail);
+			.then(() => done(), done.fail);
 		});
 	});
 	describe('runtime', () => {
@@ -709,7 +709,7 @@ describe('update', () => {
 			create({name: testRunName, runtime: initialRuntime, region: awsRegion, source: workingdir, handler: 'main.handler'}).then(result => {
 				newObjects.lambdaRole = result.lambda && result.lambda.role;
 				newObjects.lambdaFunction = result.lambda && result.lambda.name;
-			}).then(done, done.fail);
+			}).then(() => done(), done.fail);
 		});
 		it('does not change the runtime if not provided', done => {
 			underTest({source: workingdir, version: 'new'})
@@ -717,7 +717,7 @@ describe('update', () => {
 			.then(lambdaResult => expect(lambdaResult.Runtime).toEqual(initialRuntime))
 			.then(() => getLambdaConfiguration())
 			.then(lambdaResult => expect(lambdaResult.Runtime).toEqual(initialRuntime))
-			.then(done, done.fail);
+			.then(() => done(), done.fail);
 		});
 		it('can update the runtime when requested', done => {
 			underTest({source: workingdir, version: 'new', runtime: newRuntime})
@@ -725,7 +725,7 @@ describe('update', () => {
 			.then(lambdaResult => expect(lambdaResult.Runtime).toEqual(newRuntime))
 			.then(() => getLambdaConfiguration())
 			.then(lambdaResult => expect(lambdaResult.Runtime).toEqual(newRuntime))
-			.then(done, done.fail);
+			.then(() => done(), done.fail);
 		});
 	});
 	describe('memory', () => {
@@ -734,7 +734,7 @@ describe('update', () => {
 			create({name: testRunName, memory: 256, region: awsRegion, source: workingdir, handler: 'main.handler'}).then(result => {
 				newObjects.lambdaRole = result.lambda && result.lambda.role;
 				newObjects.lambdaFunction = result.lambda && result.lambda.name;
-			}).then(done, done.fail);
+			}).then(() => done(), done.fail);
 		});
 		it('does not change the memory if not provided', done => {
 			underTest({source: workingdir, version: 'new'})
@@ -742,35 +742,35 @@ describe('update', () => {
 			.then(configuration => expect(configuration.MemorySize).toEqual(256))
 			.then(() => getLambdaConfiguration())
 			.then(configuration => expect(configuration.MemorySize).toEqual(256))
-			.then(done, done.fail);
+			.then(() => done(), done.fail);
 		});
 		it(`fails if memory value is < ${limits.LAMBDA.MEMORY.MIN}`, done => {
 			underTest({source: workingdir, version: 'new', memory: 64})
 			.then(() => done.fail(`update succeeded`), error => expect(error).toEqual(`the memory value provided must be greater than or equal to ${limits.LAMBDA.MEMORY.MIN}`))
 			.then(() => getLambdaConfiguration())
 			.then(configuration => expect(configuration.MemorySize).toEqual(256))
-			.then(done, done.fail);
+			.then(() => done(), done.fail);
 		});
 		it('fails if memory value is 0', done => {
 			underTest({source: workingdir, version: 'new', memory: 0})
 				.then(() => done.fail(`update succeeded`), error => expect(error).toEqual(`the memory value provided must be greater than or equal to ${limits.LAMBDA.MEMORY.MIN}`))
 			.then(() => getLambdaConfiguration())
 			.then(configuration => expect(configuration.MemorySize).toEqual(256))
-			.then(done, done.fail);
+			.then(() => done(), done.fail);
 		});
 		it(`fails if memory value is > ${limits.LAMBDA.MEMORY.MAX}`, done => {
 			underTest({source: workingdir, version: 'new', memory: limits.LAMBDA.MEMORY.MAX + 64})
 			.then(() => done.fail(`update succeeded`), error => expect(error).toEqual(`the memory value provided must be less than or equal to ${limits.LAMBDA.MEMORY.MAX}`))
 			.then(() => getLambdaConfiguration())
 			.then(configuration => expect(configuration.MemorySize).toEqual(256))
-			.then(done, done.fail);
+			.then(() => done(), done.fail);
 		});
 		it('fails if memory value is not a multiple of 64', done => {
 			underTest({source: workingdir, version: 'new', memory: 130})
 			.then(() => done.fail('update succeeded'), error => expect(error).toEqual('the memory value provided must be a multiple of 64'))
 			.then(() => getLambdaConfiguration())
 			.then(configuration => expect(configuration.MemorySize).toEqual(256))
-			.then(done, done.fail);
+			.then(() => done(), done.fail);
 		});
 		it('can specify memory size using the --memory argument', done => {
 			underTest({source: workingdir, version: 'new', memory: limits.LAMBDA.MEMORY.MAX})
@@ -778,7 +778,7 @@ describe('update', () => {
 			.then(configuration => expect(configuration.MemorySize).toEqual(limits.LAMBDA.MEMORY.MAX))
 			.then(() => getLambdaConfiguration())
 			.then(configuration => expect(configuration.MemorySize).toEqual(limits.LAMBDA.MEMORY.MAX))
-			.then(done, done.fail);
+			.then(() => done(), done.fail);
 		});
 	});
 	describe('environment variables', () => {
@@ -800,7 +800,7 @@ describe('update', () => {
 			}).then(result => {
 				newObjects.lambdaRole = result.lambda && result.lambda.role;
 				newObjects.lambdaFunction = result.lambda && result.lambda.name;
-			}).then(done, done.fail);
+			}).then(() => done(), done.fail);
 		});
 		it('does not change environment variables if set-env not provided', done => {
 			return underTest({source: workingdir, version: 'new'}, logger)
@@ -823,7 +823,7 @@ describe('update', () => {
 				expect(Object.keys(env).filter(nonStandard).sort()).toEqual(['XPATH', 'YPATH']);
 				expect(env.XPATH).toEqual('/var/www');
 				expect(env.YPATH).toEqual('/var/lib');
-			}).then(done, done.fail);
+			}).then(() => done(), done.fail);
 		});
 		it('changes environment variables if set-env is provided', done => {
 			return underTest({source: workingdir, version: 'new', 'set-env': 'XPATH=/opt,ZPATH=/usr'}, logger)
@@ -847,7 +847,7 @@ describe('update', () => {
 				expect(env.XPATH).toEqual('/opt');
 				expect(env.YPATH).toBeFalsy();
 				expect(env.ZPATH).toEqual('/usr');
-			}).then(done, done.fail);
+			}).then(() => done(), done.fail);
 		});
 		it('merges env variables if update-env is provided', done => {
 			return underTest({source: workingdir, version: 'new', 'update-env': 'XPATH=/opt,ZPATH=/usr'})
@@ -872,7 +872,7 @@ describe('update', () => {
 				expect(env.XPATH).toEqual('/opt');
 				expect(env.YPATH).toEqual('/var/lib');
 				expect(env.ZPATH).toEqual('/usr');
-			}).then(done, done.fail);
+			}).then(() => done(), done.fail);
 
 		});
 		it('changes env variables specified in a JSON file', done => {
@@ -899,7 +899,7 @@ describe('update', () => {
 				expect(env.XPATH).toEqual('/opt');
 				expect(env.YPATH).toBeFalsy();
 				expect(env.ZPATH).toEqual('/usr');
-			}).then(done, done.fail);
+			}).then(() => done(), done.fail);
 		});
 		it('updates env variables specified in a JSON file if update-env-from-json is provided', done => {
 			const envpath = path.join(workingdir, 'env.json');
@@ -926,7 +926,7 @@ describe('update', () => {
 				expect(env.XPATH).toEqual('/opt');
 				expect(env.YPATH).toEqual('/var/lib');
 				expect(env.ZPATH).toEqual('/usr');
-			}).then(done, done.fail);
+			}).then(() => done(), done.fail);
 		});
 
 		it('refuses to work if reading the variables fails', done => {
@@ -941,7 +941,7 @@ describe('update', () => {
 		it('loads up the environment variables while validating the package to allow any code that expects them to initialize -- fix for https://github.com/claudiajs/claudia/issues/96', done => {
 			fsUtil.copy('spec/test-projects/throw-if-not-env', workingdir, true);
 			process.env.TEST_VAR = '';
-			underTest({source: workingdir, version: 'new', 'set-env': 'TEST_VAR=abc'}, logger).then(done, done.fail);
+			underTest({source: workingdir, version: 'new', 'set-env': 'TEST_VAR=abc'}, logger).then(() => done(), done.fail);
 		});
 
 	});
@@ -966,10 +966,10 @@ describe('update', () => {
 				createLayer(prefix + '-layer-text3', path.join(__dirname, 'test-layers', 'text-layer.zip'))
 			])
 			.then(results => layers = results)
-			.then(done, done.fail);
+			.then(() => done(), done.fail);
 		});
 		afterAll((done) => {
-			Promise.all(layers.map(deleteLayer)).then(done, done.fail);
+			Promise.all(layers.map(deleteLayer)).then(() => done(), done.fail);
 		});
 		describe('when updating a function without layers', () => {
 			beforeEach(done => {
@@ -977,13 +977,13 @@ describe('update', () => {
 				create({name: testRunName, timeout: 10, region: awsRegion, source: workingdir, handler: 'main.handler'}).then(result => {
 					newObjects.lambdaRole = result.lambda && result.lambda.role;
 					newObjects.lambdaFunction = result.lambda && result.lambda.name;
-				}).then(done, done.fail);
+				}).then(() => done(), done.fail);
 			});
 			it('attaches no layers by default', (done) => {
 				return underTest({source: workingdir, version: 'new'})
 					.then(() => getLambdaConfiguration('new'))
 					.then(configuration => expect(configuration.Layers).toBeFalsy())
-					.then(done, done.fail);
+					.then(() => done(), done.fail);
 			});
 			it('can replace layer with --layers', (done) => {
 				return underTest({source: workingdir, version: 'new', 'layers': layers[0].LayerVersionArn})
@@ -991,7 +991,7 @@ describe('update', () => {
 					.then(configuration => {
 						expect(configuration.Layers.map(l => l.Arn)).toEqual([layers[0].LayerVersionArn]);
 					})
-					.then(done, done.fail);
+					.then(() => done(), done.fail);
 			});
 			it('can replace multple layers with --layers', (done) => {
 				return underTest({source: workingdir, version: 'new', 'layers': layers[0].LayerVersionArn + ',' + layers[1].LayerVersionArn })
@@ -999,7 +999,7 @@ describe('update', () => {
 					.then(configuration => {
 						expect(configuration.Layers.map(l => l.Arn)).toEqual([layers[0].LayerVersionArn, layers[1].LayerVersionArn]);
 					})
-					.then(done, done.fail);
+					.then(() => done(), done.fail);
 			});
 			it('can add a single layer with --add-layers', (done) => {
 				return underTest({source: workingdir, version: 'new', 'add-layers': layers[0].LayerVersionArn})
@@ -1007,7 +1007,7 @@ describe('update', () => {
 					.then(configuration => {
 						expect(configuration.Layers.map(l => l.Arn)).toEqual([layers[0].LayerVersionArn]);
 					})
-					.then(done, done.fail);
+					.then(() => done(), done.fail);
 			});
 
 			it('can add multiple layers with --add-layers', (done) => {
@@ -1016,7 +1016,7 @@ describe('update', () => {
 					.then(configuration => {
 						expect(configuration.Layers.map(l => l.Arn)).toEqual([layers[0].LayerVersionArn, layers[1].LayerVersionArn]);
 					})
-					.then(done, done.fail);
+					.then(() => done(), done.fail);
 			});
 		});
 		describe('when updating a function with a layers', () => {
@@ -1026,7 +1026,7 @@ describe('update', () => {
 				.then(result => {
 					newObjects.lambdaRole = result.lambda && result.lambda.role;
 					newObjects.lambdaFunction = result.lambda && result.lambda.name;
-				}).then(done, done.fail);
+				}).then(() => done(), done.fail);
 			});
 			it('retains old layers if no layer options specified', (done) => {
 				return underTest({source: workingdir, version: 'new'})
@@ -1034,7 +1034,7 @@ describe('update', () => {
 					.then(configuration => {
 						expect(configuration.Layers.map(l => l.Arn)).toEqual([layers[0].LayerVersionArn, layers[1].LayerVersionArn]);
 					})
-					.then(done, done.fail);
+					.then(() => done(), done.fail);
 			});
 			it('replaces all layers with --layers', (done) => {
 				return underTest({source: workingdir, version: 'new', 'layers': layers[2].LayerVersionArn})
@@ -1042,7 +1042,7 @@ describe('update', () => {
 					.then(configuration => {
 						expect(configuration.Layers.map(l => l.Arn)).toEqual([layers[2].LayerVersionArn]);
 					})
-					.then(done, done.fail);
+					.then(() => done(), done.fail);
 			});
 			it('can replace multple layers with --layers', (done) => {
 				return underTest({source: workingdir, version: 'new', 'layers': layers[2].LayerVersionArn + ',' + layers[3].LayerVersionArn })
@@ -1050,7 +1050,7 @@ describe('update', () => {
 					.then(configuration => {
 						expect(configuration.Layers.map(l => l.Arn)).toEqual([layers[2].LayerVersionArn, layers[3].LayerVersionArn]);
 					})
-					.then(done, done.fail);
+					.then(() => done(), done.fail);
 			});
 			it('can add a single layer with --add-layers', (done) => {
 				return underTest({source: workingdir, version: 'new', 'add-layers': layers[2].LayerVersionArn})
@@ -1058,7 +1058,7 @@ describe('update', () => {
 					.then(configuration => {
 						expect(configuration.Layers.map(l => l.Arn)).toEqual([layers[0].LayerVersionArn, layers[1].LayerVersionArn, layers[2].LayerVersionArn]);
 					})
-					.then(done, done.fail);
+					.then(() => done(), done.fail);
 			});
 			it('can add multiple layers with --add-layers', (done) => {
 				return underTest({source: workingdir, version: 'new', 'add-layers': layers[2].LayerVersionArn + ',' + layers[3].LayerVersionArn})
@@ -1066,7 +1066,7 @@ describe('update', () => {
 					.then(configuration => {
 						expect(configuration.Layers.map(l => l.Arn)).toEqual([layers[0].LayerVersionArn, layers[1].LayerVersionArn, layers[2].LayerVersionArn, layers[3].LayerVersionArn]);
 					})
-					.then(done, done.fail);
+					.then(() => done(), done.fail);
 			});
 			it('can remove a layer with --remove-layers', (done) => {
 				return underTest({source: workingdir, version: 'new', 'remove-layers': layers[1].LayerVersionArn})
@@ -1074,7 +1074,7 @@ describe('update', () => {
 					.then(configuration => {
 						expect(configuration.Layers.map(l => l.Arn)).toEqual([layers[0].LayerVersionArn]);
 					})
-					.then(done, done.fail);
+					.then(() => done(), done.fail);
 			});
 			it('can remove multiple layers with --remove-layers', (done) => {
 				return underTest({source: workingdir, version: 'new', 'remove-layers': layers[1].LayerVersionArn + ',' + layers[0].LayerVersionArn})
@@ -1082,7 +1082,7 @@ describe('update', () => {
 					.then(configuration => {
 						expect(configuration.Layers).toBeFalsy();
 					})
-					.then(done, done.fail);
+					.then(() => done(), done.fail);
 			});
 			it('can mix adding and removing layers', (done) => {
 				return underTest({source: workingdir, version: 'new', 'remove-layers': layers[1].LayerVersionArn, 'add-layers': layers[2].LayerVersionArn})
@@ -1090,7 +1090,7 @@ describe('update', () => {
 					.then(configuration => {
 						expect(configuration.Layers.map(l => l.Arn)).toEqual([layers[0].LayerVersionArn, layers[2].LayerVersionArn]);
 					})
-					.then(done, done.fail);
+					.then(() => done(), done.fail);
 			});
 		});
 
@@ -1108,11 +1108,11 @@ describe('update', () => {
 				Name: secondSnsTopicName
 			})))
 			.then(result => secondSnsTopicArn = result.TopicArn)
-			.then(done);
+			.then(() => done());
 		});
 		afterAll(done => {
 			destroyObjects({snsTopic: snsTopicArn})
-			.then(done, done.fail);
+			.then(() => done(), done.fail);
 		});
 		describe('when the original function had a dlq', () => {
 			beforeEach(done => {
@@ -1122,7 +1122,7 @@ describe('update', () => {
 				.then(result => {
 					newObjects.lambdaRole = result.lambda && result.lambda.role;
 					newObjects.lambdaFunction = result.lambda && result.lambda.name;
-				}).then(done, done.fail);
+				}).then(() => done(), done.fail);
 			});
 			it('does not remove the DLQ configuration if not repeated', done => {
 				return underTest({source: workingdir, version: 'new'})
@@ -1140,7 +1140,7 @@ describe('update', () => {
 							[{ Effect: 'Allow', Action: ['sns:Publish'], Resource: [snsTopicArn] }]
 						);
 					})
-					.then(done, done.fail);
+					.then(() => done(), done.fail);
 			});
 			it('updates the dlq topic and policy if requested by ARN', done => {
 				return underTest({source: workingdir, 'dlq-sns': secondSnsTopicArn, version: 'new'})
@@ -1158,7 +1158,7 @@ describe('update', () => {
 							[{ Effect: 'Allow', Action: ['sns:Publish'], Resource: [secondSnsTopicArn] }]
 						);
 					})
-					.then(done, done.fail);
+					.then(() => done(), done.fail);
 			});
 			it('updates the dlq topic and policy if requested by name', done => {
 				return underTest({source: workingdir, 'dlq-sns': secondSnsTopicName, version: 'new'})
@@ -1176,7 +1176,7 @@ describe('update', () => {
 							[{ Effect: 'Allow', Action: ['sns:Publish'], Resource: [secondSnsTopicArn] }]
 						);
 					})
-					.then(done, done.fail);
+					.then(() => done(), done.fail);
 			});
 
 		});
@@ -1187,7 +1187,7 @@ describe('update', () => {
 				.then(result => {
 					newObjects.lambdaRole = result.lambda && result.lambda.role;
 					newObjects.lambdaFunction = result.lambda && result.lambda.name;
-				}).then(done, done.fail);
+				}).then(() => done(), done.fail);
 			});
 			it('does not add the DLQ configuration if not requested', done => {
 				return underTest({source: workingdir, version: 'new'})
@@ -1203,7 +1203,7 @@ describe('update', () => {
 					.then(result => {
 						expect(result.PolicyNames.find(t => t === 'dlq-publisher')).toBeFalsy();
 					})
-					.then(done, done.fail);
+					.then(() => done(), done.fail);
 			});
 			it('updates the dlq topic and policy if requested by ARN', done => {
 				return underTest({source: workingdir, 'dlq-sns': secondSnsTopicArn, version: 'new'})
@@ -1221,7 +1221,7 @@ describe('update', () => {
 							[{ Effect: 'Allow', Action: ['sns:Publish'], Resource: [secondSnsTopicArn] }]
 						);
 					})
-					.then(done, done.fail);
+					.then(() => done(), done.fail);
 			});
 			it('updates the dlq topic and policy if requested by name', done => {
 				return underTest({source: workingdir, 'dlq-sns': secondSnsTopicName, version: 'new'})
@@ -1239,7 +1239,7 @@ describe('update', () => {
 							[{ Effect: 'Allow', Action: ['sns:Publish'], Resource: [secondSnsTopicArn] }]
 						);
 					})
-					.then(done, done.fail);
+					.then(() => done(), done.fail);
 			});
 
 		});
@@ -1263,7 +1263,7 @@ describe('update', () => {
 				.then(() => create({name: testRunName, role: roleName, region: awsRegion, source: workingdir, handler: 'main.handler'}))
 				.then(result => {
 					newObjects.lambdaFunction = result.lambda && result.lambda.name;
-				}).then(done, done.fail);
+				}).then(() => done(), done.fail);
 			});
 			it('does not patch the role while adding the dlq if skip-iam is set', done => {
 				return underTest({source: workingdir, 'dlq-sns': snsTopicArn, version: 'new', 'skip-iam': true})
@@ -1279,7 +1279,7 @@ describe('update', () => {
 					.then(result => {
 						expect(result.PolicyNames.find(t => t === 'dlq-publisher')).toBeFalsy();
 					})
-					.then(done, done.fail);
+					.then(() => done(), done.fail);
 			});
 		});
 	});

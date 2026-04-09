@@ -50,7 +50,7 @@ describe('retriableWrap', () => {
 			const sentCommand = client.send.calls.mostRecent().args[0];
 			expect(sentCommand instanceof FirstMethodCommand).toBe(true);
 			expect(sentCommand.input).toEqual({a: 123});
-		}).then(done, done.fail);
+		}).then(() => done(), done.fail);
 	});
 	it('calls the correct Command for different methods', done => {
 		client.send.and.returnValue(Promise.resolve('second-result'));
@@ -59,7 +59,7 @@ describe('retriableWrap', () => {
 			const sentCommand = client.send.calls.mostRecent().args[0];
 			expect(sentCommand instanceof SecondMethodCommand).toBe(true);
 			expect(sentCommand.input).toEqual({b: 456});
-		}).then(done, done.fail);
+		}).then(() => done(), done.fail);
 	});
 	describe('when client.send resolves', () => {
 		it('does not resolve or reject until the underlying promise resolves', done => {
@@ -68,20 +68,20 @@ describe('retriableWrap', () => {
 			Promise.resolve().then(() => {
 				expect(resolve).not.toHaveBeenCalled();
 				expect(reject).not.toHaveBeenCalled();
-			}).then(done, done.fail);
+			}).then(() => done(), done.fail);
 		});
 		it('resolves as soon as the underlying promise resolves', done => {
 			wrapped.firstMethodPromise({}).then(res => {
 				expect(res).toEqual('result');
 				expect(onRetry).not.toHaveBeenCalled();
-			}).then(done, done.fail);
+			}).then(() => done(), done.fail);
 			promises.first.resolve('result');
 		});
 		it('rejects as soon as the underlying promise rejects with a non retriable error', done => {
 			wrapped.firstMethodPromise({}).then(done.fail, err => {
 				expect(err).toEqual('result');
 				expect(onRetry).not.toHaveBeenCalled();
-			}).then(done);
+			}).then(() => done());
 			promises.first.reject('result');
 		});
 	});
@@ -93,7 +93,7 @@ describe('retriableWrap', () => {
 			wrapped.retryAsyncPromise({}).then(result => {
 				expect(onRetry).toHaveBeenCalled();
 				expect(result).toEqual('good');
-			}).then(done, done.fail);
+			}).then(() => done(), done.fail);
 			promises.a.reject({name: 'TooManyRequestsException'});
 			promises.b.resolve('good');
 		});
@@ -103,7 +103,7 @@ describe('retriableWrap', () => {
 			wrapped = underTest(client, commandsModule, onRetry, 10, 5);
 			wrapped.retryAsyncPromise({}).then(done.fail, err => {
 				expect(err).toEqual({name: 'TooFewRequestsException'});
-			}).then(done, done.fail);
+			}).then(() => done(), done.fail);
 			promises.a.reject({name: 'TooFewRequestsException'});
 			promises.b.resolve('good');
 		});
@@ -114,7 +114,7 @@ describe('retriableWrap', () => {
 			wrapped.retryAsyncPromise({}).then(done.fail, err => {
 				expect(onRetry).not.toHaveBeenCalled();
 				expect(err).toEqual({name: 'TooManyRequestsException'});
-			}).then(done);
+			}).then(() => done());
 			promises.a.reject({name: 'TooManyRequestsException'});
 			promises.b.resolve('good');
 		});
