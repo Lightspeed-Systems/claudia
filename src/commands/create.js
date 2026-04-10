@@ -1,7 +1,11 @@
 const path = require('path'),
 	limits = require('../util/limits.json'),
 	fsUtil = require('../util/fs-util'),
-	aws = require('aws-sdk'),
+	apiGwCommands = require('@aws-sdk/client-api-gateway'),
+	{ APIGatewayClient } = require('@aws-sdk/client-api-gateway'),
+	{ LambdaClient, CreateFunctionCommand } = require('@aws-sdk/client-lambda'),
+	{ S3Client } = require('@aws-sdk/client-s3'),
+	{ IAMClient, GetRoleCommand, CreateRoleCommand, PutRolePolicyCommand } = require('@aws-sdk/client-iam'),
 	zipdir = require('../tasks/zipdir'),
 	collectFiles = require('../tasks/collect-files'),
 	cleanUpPackage = require('../tasks/clean-up-package'),
@@ -30,7 +34,8 @@ const path = require('path'),
 	isSNSArn = require('../util/is-sns-arn'),
 	lambdaInvocationPolicy = require('../policies/lambda-invocation-policy'),
 	waitUntilNotPending = require('../tasks/wait-until-not-pending'),
-	NullLogger = require('../util/null-logger');
+	NullLogger = require('../util/null-logger'),
+	awsClientConfig = require('../util/aws-client-config');
 module.exports = function create(options, optionalLogger) {
 	'use strict';
 	let roleMetadata,
@@ -48,9 +53,9 @@ module.exports = function create(options, optionalLogger) {
 		awsRetries = options && options['aws-retries'] && parseInt(options['aws-retries'], 10) || 15,
 		source = (options && options.source) || process.cwd(),
 		configFile = (options && options.config) || path.join(source, 'claudia.json'),
-		iam = loggingWrap(new aws.IAM({region: options.region}), {log: logger.logApiCall, logName: 'iam'}),
-		lambda = loggingWrap(new aws.Lambda({region: options.region}), {log: logger.logApiCall, logName: 'lambda'}),
-		s3 = loggingWrap(new aws.S3({region: options.region, signatureVersion: 'v4'}), {log: logger.logApiCall, logName: 's3'}),
+		iam = loggingWrap(new IAMClient(awsClientConfig(options.region, options)), {log: logger.logApiCall, logName: 'iam'}),
+		lambda = loggingWrap(new LambdaClient(awsClientConfig(options.region, options)), {log: logger.logApiCall, logName: 'lambda'}),
+		s3 = loggingWrap(new S3Client(awsClientConfig(options.region, options)), {log: logger.logApiCall, logName: 's3'}),
 		getSnsDLQTopic = function () {
 			const topicNameOrArn = options['dlq-sns'];
 			if (!topicNameOrArn) {
@@ -62,7 +67,8 @@ module.exports = function create(options, optionalLogger) {
 			return `arn:${awsPartition}:sns:${options.region}:${ownerAccount}:${topicNameOrArn}`;
 		},
 		apiGatewayPromise = retriableWrap(
-			loggingWrap(new aws.APIGateway({region: options.region}), {log: logger.logApiCall, logName: 'apigateway'}),
+			loggingWrap(new APIGatewayClient(awsClientConfig(options.region, options)), {log: logger.logApiCall, logName: 'apigateway'}),
+			apiGwCommands,
 			() => logger.logStage('rate-limited by AWS, waiting before retry')
 		),
 		policyFiles = function () {
@@ -169,7 +175,7 @@ module.exports = function create(options, optionalLogger) {
 			return retry(
 				() => {
 					logger.logStage('creating Lambda');
-					return lambda.createFunction({
+					return lambda.send(new CreateFunctionCommand({
 						Architectures: [options.arch || 'x86_64'],
 						Code: functionCode,
 						FunctionName: functionName,
@@ -190,12 +196,12 @@ module.exports = function create(options, optionalLogger) {
 						DeadLetterConfig: getSnsDLQTopic() ? {
 							TargetArn: getSnsDLQTopic()
 						} : null
-					}).promise();
+					}));
 				},
 				awsDelay, awsRetries,
 				error => {
 					return error &&
-						error.code === 'InvalidParameterValueException' &&
+						error.name === 'InvalidParameterValueException' &&
 						(error.message === 'The role defined for the function cannot be assumed by Lambda.'
 						|| error.message.startsWith('The provided execution role does not have permissions')
 						|| error.message.startsWith('Lambda was unable to configure access to your environment variables because the KMS key is invalid for CreateGrant.')
@@ -245,7 +251,7 @@ module.exports = function create(options, optionalLogger) {
 					module: options['api-module'],
 					url: apiGWUrl(result.id, options.region, alias)
 				};
-				return rebuildWebApi(lambdaMetadata.FunctionName, alias, result.id, apiConfig, ownerAccount, awsPartition, options.region, logger, options['cache-api-config']);
+				return rebuildWebApi(lambdaMetadata.FunctionName, alias, result.id, apiConfig, ownerAccount, awsPartition, options.region, logger, options['cache-api-config'], options);
 			})
 			.then(() => {
 				if (apiModule.postDeploy) {
@@ -259,8 +265,7 @@ module.exports = function create(options, optionalLogger) {
 							region: options.region
 						},
 						{
-							apiGatewayPromise: apiGatewayPromise,
-							aws: aws
+							apiGatewayPromise: apiGatewayPromise
 						}
 					);
 				}
@@ -324,12 +329,12 @@ module.exports = function create(options, optionalLogger) {
 						}
 					});
 				}
-				return iam.getRole({RoleName: options.role}).promise();
+				return iam.send(new GetRoleCommand({RoleName: options.role}));
 			} else {
-				return iam.createRole({
+				return iam.send(new CreateRoleCommand({
 					RoleName: functionName + '-executor',
 					AssumeRolePolicyDocument: executorPolicy()
-				}).promise();
+				}));
 			}
 		},
 		addExtraPolicies = function () {
@@ -357,7 +362,7 @@ module.exports = function create(options, optionalLogger) {
 		functionName = packageInfo.name;
 		functionDesc = packageInfo.description;
 	})
-	.then(() => getOwnerInfo(options.region, logger))
+	.then(() => getOwnerInfo(options.region, logger, options))
 	.then(ownerInfo => {
 		ownerAccount = ownerInfo.account;
 		awsPartition = ownerInfo.partition;
@@ -386,18 +391,18 @@ module.exports = function create(options, optionalLogger) {
 	})
 	.then(() => {
 		if (!options.role) {
-			return iam.putRolePolicy({
+			return iam.send(new PutRolePolicyCommand({
 				RoleName: roleMetadata.Role.RoleName,
 				PolicyName: 'log-writer',
 				PolicyDocument: loggingPolicy(awsPartition)
-			}).promise()
+			}))
 			.then(() => {
 				if (getSnsDLQTopic()) {
-					return iam.putRolePolicy({
+					return iam.send(new PutRolePolicyCommand({
 						RoleName: roleMetadata.Role.RoleName,
 						PolicyName: 'dlq-publisher',
 						PolicyDocument: snsPublishPolicy(getSnsDLQTopic())
-					}).promise();
+					}));
 				}
 			});
 		}
@@ -409,20 +414,20 @@ module.exports = function create(options, optionalLogger) {
 	})
 	.then(() => {
 		if (options['security-group-ids'] && !isRoleArn(options.role)) {
-			return iam.putRolePolicy({
+			return iam.send(new PutRolePolicyCommand({
 				RoleName: roleMetadata.Role.RoleName,
 				PolicyName: 'vpc-access-execution',
 				PolicyDocument: vpcPolicy()
-			}).promise();
+			}));
 		}
 	})
 	.then(() => {
 		if (options['allow-recursion']) {
-			return iam.putRolePolicy({
+			return iam.send(new PutRolePolicyCommand({
 				RoleName: roleMetadata.Role.RoleName,
 				PolicyName: 'recursive-execution',
 				PolicyDocument: lambdaInvocationPolicy(functionName, awsPartition, options.region)
-			}).promise();
+			}));
 		}
 	})
 	.then(() => lambdaCode(s3, packageArchive, options['use-s3-bucket'], options['s3-sse'], options['s3-key']))

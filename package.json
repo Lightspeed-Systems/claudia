@@ -39,6 +39,7 @@
     "prepublishOnly": "npm shrinkwrap && node src/util/doc-md.js",
     "pretest": "eslint .",
     "test": "node spec/support/jasmine-runner.js",
+    "test:unit": "node spec/support/unit-test-runner.js",
     "debug": "node --debug-brk --inspect spec/support/jasmine-runner.js",
     "integration-build": "aws codebuild start-build --project-name claudiajs --region us-west-2 --profile claudia-test",
     "integration-results": "aws s3 cp s3://claudiatestresults/claudiajs/buildresult.txt . --profile claudia-test",
@@ -50,10 +51,23 @@
     "Alexander Simovic (https://github.com/simalexan)"
   ],
   "dependencies": {
-    "archiver": "^3.0.0",
-    "aws-sdk": "^2.1009.0",
-    "fs-extra": "^6.0.1",
-    "glob": "^7.1.2",
+    "@aws-sdk/client-api-gateway": "^3.1026.0",
+    "@aws-sdk/client-cloudfront": "^3.1026.0",
+    "@aws-sdk/client-cloudwatch-events": "^3.1026.0",
+    "@aws-sdk/client-cognito-identity-provider": "^3.1026.0",
+    "@aws-sdk/client-iam": "^3.1026.0",
+    "@aws-sdk/client-iot": "^3.1026.0",
+    "@aws-sdk/client-kinesis": "^3.1026.0",
+    "@aws-sdk/client-lambda": "^3.1026.0",
+    "@aws-sdk/client-s3": "^3.1026.0",
+    "@aws-sdk/client-sns": "^3.1026.0",
+    "@aws-sdk/client-sqs": "^3.1026.0",
+    "@aws-sdk/client-sts": "^3.1026.0",
+    "@aws-sdk/credential-providers": "^3.1026.0",
+    "@aws-sdk/lib-storage": "^3.1026.0",
+    "archiver": "^7.0.1",
+    "fs-extra": "^11.3.4",
+    "glob": "^13.0.6",
     "gunzip-maybe": "^1.4.0",
     "https-proxy-agent": "^5.0.0",
     "minimal-request-promise": "^1.1.0",
@@ -62,16 +76,26 @@
     "sequential-promise-map": "^1.0.0",
     "tar-fs": "^2.1.1",
     "uuid": "^8.3.2",
-    "which": "^2.0.2"
+    "which": "^5.0.0"
   },
   "devDependencies": {
+    "@aws-sdk/client-cloudwatch-logs": "^3.1026.0",
+    "@aws-sdk/client-ec2": "^3.1026.0",
+    "@aws-sdk/client-iot-data-plane": "^3.1026.0",
+    "@eslint/js": "^9.39.4",
     "decompress": "^4.2.0",
     "dotenv": "^2.0.0",
-    "eslint": "^8.0.1",
-    "jasmine": "^2.5.2",
-    "jasmine-spec-reporter": "^2.7.0"
+    "eslint": "^9.39.4",
+    "globals": "^17.4.0",
+    "jasmine": "^5.13.0",
+    "jasmine-spec-reporter": "^7.0.0"
+  },
+  "overrides": {
+    "archiver-utils": {
+      "glob": "^13.0.6"
+    }
   },
   "engines": {
-    "node": ">=8.10.0"
+    "node": ">=20.0.0"
   }
 }

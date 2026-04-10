@@ -7,12 +7,13 @@ const underTest = require('../src/commands/add-s3-event-source'),
 	fs = require('fs'),
 	path = require('path'),
 	retry = require('oh-no-i-insist'),
-	aws = require('aws-sdk'),
+	{ S3Client, GetBucketNotificationConfigurationCommand, CreateBucketCommand, PutObjectCommand } = require('@aws-sdk/client-s3'),
+	{ waitUntilObjectNotExists } = require('@aws-sdk/client-s3'),
 	genericRole = require('./util/generic-role'),
 	awsRegion = require('./util/test-aws-region');
 describe('addS3EventSource', () => {
 	'use strict';
-	const s3 = new aws.S3({region: awsRegion});
+	const s3 = new S3Client({region: awsRegion});
 	describe('validation', () => {
 		let workingdir;
 		beforeEach(() => {
@@ -73,9 +74,9 @@ describe('addS3EventSource', () => {
 		const getBucketNotifications = function (expectedConfigs) {
 			const length = expectedConfigs || 1;
 			return retry(() => {
-				return s3.getBucketNotificationConfiguration({
+				return s3.send(new GetBucketNotificationConfigurationCommand({
 					Bucket: bucketName
-				}).promise()
+				}))
 					.then(config => {
 						if (config && config.LambdaFunctionConfigurations && config.LambdaFunctionConfigurations.length >= length) {
 							return config;
@@ -97,46 +98,46 @@ describe('addS3EventSource', () => {
 				genericFunction.lambdaRole = result.lambda && result.lambda.role;
 				genericFunction.lambdaFunction = result.lambda && result.lambda.name;
 			})
-			.then(done, done.fail);
+			.then(() => done(), done.fail);
 		});
 		afterAll(done => {
 			destroyObjects(genericFunction)
-			.then(done, done.fail);
+			.then(() => done(), done.fail);
 		});
 		afterEach(done => {
 			destroyObjects(newObjects)
-				.then(done, done.fail);
+				.then(() => done(), done.fail);
 		});
 		beforeEach(done => {
 			newObjects = { };
 			bucketName = 'test' + Date.now() + '.bucket';
-			s3.createBucket({
+			s3.send(new CreateBucketCommand({
 				Bucket: bucketName,
 				ACL: 'private'
-			}).promise()
+			}))
 			.then(() => {
 				newObjects.s3Bucket = bucketName;
 			})
-			.then(done);
+			.then(() => done());
 		});
 		it('sets up privileges and s3 notifications for any created files in the s3 bucket', done => {
 			underTest({source: workingdir, bucket: bucketName})
 			.then(() => getBucketNotifications())
 			.then(() => {
-				return s3.putObject({
+				return s3.send(new PutObjectCommand({
 					Bucket: bucketName,
 					Key: `${testRunName}.txt`,
 					Body: 'file contents',
 					ACL: 'private'
-				}).promise();
+				}));
 			})
 			.then(() => {
-				return s3.waitFor('objectNotExists', {
+				return waitUntilObjectNotExists({client: s3, maxWaitTime: 300}, {
 					Bucket: bucketName,
 					Key: `${testRunName}.txt`
-				}).promise();
+				});
 			})
-			.then(done, done.fail);
+			.then(() => done(), done.fail);
 		});
 		it('adds a prefix if requested', done => {
 			underTest({source: workingdir, bucket: bucketName, prefix: 'in/'})
@@ -147,7 +148,7 @@ describe('addS3EventSource', () => {
 					Value: 'in/'
 				});
 			})
-			.then(done, done.fail);
+			.then(() => done(), done.fail);
 		});
 		it('adds a suffix if requested', done => {
 			underTest({source: workingdir, bucket: bucketName, suffix: '.jpg'})
@@ -158,7 +159,7 @@ describe('addS3EventSource', () => {
 					Value: '.jpg'
 				});
 			})
-			.then(done, done.fail);
+			.then(() => done(), done.fail);
 		});
 		it('adds both a prefix and suffix if requested', done => {
 			underTest({source: workingdir, bucket: bucketName, prefix: 'in/', suffix: '.jpg'})
@@ -173,19 +174,19 @@ describe('addS3EventSource', () => {
 					Value: '.jpg'
 				});
 			})
-			.then(done, done.fail);
+			.then(() => done(), done.fail);
 		});
 		it('adds default event if no events requested', done => {
 			underTest({ source: workingdir, bucket: bucketName })
 			.then(() => getBucketNotifications())
 			.then(config => expect(config.LambdaFunctionConfigurations[0].Events).toEqual(['s3:ObjectCreated:*']))
-			.then(done, done.fail);
+			.then(() => done(), done.fail);
 		});
 		it('adds events if requested', done => {
 			underTest({ source: workingdir, bucket: bucketName, events: 's3:ObjectCreated:*,s3:ObjectRemoved:*' })
 			.then(() => getBucketNotifications())
 			.then(config => expect(config.LambdaFunctionConfigurations[0].Events.sort()).toEqual(['s3:ObjectCreated:*', 's3:ObjectRemoved:*']))
-			.then(done, done.fail);
+			.then(() => done(), done.fail);
 		});
 		it('allows adding several events for the same bucket', done => {
 			underTest({ source: workingdir, bucket: bucketName, events: 's3:ObjectCreated:*', prefix: '/in/' })
@@ -201,32 +202,32 @@ describe('addS3EventSource', () => {
 					Value: '/out/'
 				});
 			})
-			.then(done, done.fail);
+			.then(() => done(), done.fail);
 		});
 		it('binds to an alias, if the version is provided', done => {
 			underTest({ source: workingdir, bucket: bucketName, version: 'special' })
 			.then(() => getBucketNotifications())
 			.then(config => expect(/:special$/.test(config.LambdaFunctionConfigurations[0].LambdaFunctionArn)).toBeTruthy())
-			.then(done, done.fail);
+			.then(() => done(), done.fail);
 		});
 		it('can execute aliased functions', done => {
 			underTest({ source: workingdir, bucket: bucketName, version: 'special' })
 			.then(() => getBucketNotifications())
 			.then(() => {
-				return s3.putObject({
+				return s3.send(new PutObjectCommand({
 					Bucket: bucketName,
 					Key: `${testRunName}.txt`,
 					Body: 'file contents',
 					ACL: 'private'
-				}).promise();
+				}));
 			})
 			.then(() => {
-				return s3.waitFor('objectNotExists', {
+				return waitUntilObjectNotExists({client: s3, maxWaitTime: 300}, {
 					Bucket: bucketName,
 					Key: `${testRunName}.txt`
-				}).promise();
+				});
 			})
-			.then(done, done.fail);
+			.then(() => done(), done.fail);
 		});
 		it('does not change any existing notification configurations', done => {
 			underTest({ source: workingdir, bucket: bucketName, version: 'special',  prefix: '/special/' })
@@ -238,7 +239,7 @@ describe('addS3EventSource', () => {
 				expect(config.LambdaFunctionConfigurations[0].LambdaFunctionArn).toMatch(/:special$/);
 				expect(config.LambdaFunctionConfigurations[1].LambdaFunctionArn).toMatch(/:crazy$/);
 			})
-			.then(done, done.fail);
+			.then(() => done(), done.fail);
 		});
 		it('can use functions created using a role ARN', done => {
 			const anotherdir = path.join(workingdir, 'subdir');
@@ -265,7 +266,7 @@ describe('addS3EventSource', () => {
 					Value: 'in/'
 				});
 			})
-			.then(done, done.fail);
+			.then(() => done(), done.fail);
 		});
 	});
 });

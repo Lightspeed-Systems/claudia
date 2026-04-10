@@ -1,0 +1,41 @@
+# Breaking Changes — AWS SDK v3 Migration
+
+This document lists breaking changes introduced by the migration from AWS SDK v2 to AWS SDK v3.
+
+## Node.js Engine Requirement
+
+- **Before:** `>=8.10.0`
+- **After:** `>=20.0.0`
+
+AWS SDK v3 requires a modern Node.js runtime. Projects using Node.js versions below 20 will need to upgrade.
+
+## `postDeploy` Hook — `utils.aws` Removed
+
+The `postDeploy` hook in API modules previously received a `utils` object containing an `aws` property (the AWS SDK v2 namespace object). This property is no longer provided.
+
+- **Before:** `utils.aws` was the `aws-sdk` v2 module, allowing `new utils.aws.DynamoDB()` etc.
+- **After:** `utils` only contains `{ apiGatewayPromise }`. `utils.aws` is `undefined`.
+
+**Migration:** Import the specific `@aws-sdk/client-*` packages you need directly in your API module instead of relying on `utils.aws`.
+
+```js
+// Before (v2)
+exports.postDeploy = function (options, lambdaDetails, utils) {
+  const dynamodb = new utils.aws.DynamoDB();
+  // ...
+};
+
+// After (v3)
+const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
+exports.postDeploy = function (options, lambdaDetails, utils) {
+  const dynamodb = new DynamoDBClient({ region: lambdaDetails.region });
+  // ...
+};
+```
+
+## AWS SDK Dependency Change
+
+- **Before:** Single `aws-sdk` v2 package.
+- **After:** Modular `@aws-sdk/client-*` v3 packages. The `aws-sdk` v2 package is no longer a dependency of claudia.
+
+This only affects claudia internals and the `postDeploy` hook change above. Lambda functions deployed by claudia are unaffected — they bundle their own dependencies.

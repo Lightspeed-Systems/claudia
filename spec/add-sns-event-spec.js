@@ -6,16 +6,18 @@ const underTest = require('../src/commands/add-sns-event-source'),
 	fs = require('fs'),
 	fsUtil = require('../src/util/fs-util'),
 	path = require('path'),
-	aws = require('aws-sdk'),
+	{ CloudWatchLogsClient, FilterLogEventsCommand } = require('@aws-sdk/client-cloudwatch-logs'),
+	{ LambdaClient, GetFunctionConfigurationCommand } = require('@aws-sdk/client-lambda'),
+	{ SNSClient, CreateTopicCommand, ListSubscriptionsByTopicCommand, GetSubscriptionAttributesCommand, PublishCommand } = require('@aws-sdk/client-sns'),
 	awsRegion = require('./util/test-aws-region');
 describe('addSNSEventSource', () => {
 	'use strict';
 	let workingdir, testRunName, newObjects, config, logs, lambda, sns;
 	beforeEach(() => {
 		workingdir = tmppath();
-		logs = new aws.CloudWatchLogs({ region: awsRegion });
-		lambda = new aws.Lambda({ region: awsRegion });
-		sns = new aws.SNS({ region: awsRegion });
+		logs = new CloudWatchLogsClient({ region: awsRegion });
+		lambda = new LambdaClient({ region: awsRegion });
+		sns = new SNSClient({ region: awsRegion });
 		testRunName = 'test' + Date.now();
 		newObjects = { workingdir: workingdir };
 		fs.mkdirSync(workingdir);
@@ -25,7 +27,7 @@ describe('addSNSEventSource', () => {
 		};
 	});
 	afterEach(done => {
-		destroyObjects(newObjects).then(done, done.fail);
+		destroyObjects(newObjects).then(() => done(), done.fail);
 	});
 	it('fails when the topic is not defined in options', done => {
 		config.topic = '';
@@ -80,43 +82,43 @@ describe('addSNSEventSource', () => {
 		beforeEach(done => {
 			createConfig = { name: testRunName, region: awsRegion, source: workingdir, handler: 'main.handler' };
 			fsUtil.copy('spec/test-projects/hello-world', workingdir, true);
-			sns.createTopic({
+			sns.send(new CreateTopicCommand({
 				Name: `${testRunName}-topic`
-			}).promise()
+			}))
 			.then(result => {
 				newObjects.snsTopic = result.TopicArn;
 				config.topic = result.TopicArn;
 			})
-			.then(done);
+			.then(() => done());
 		});
 		it('sets up privileges and rule notifications if no version given', done => {
 			let functionArn;
 			createLambda()
 			.then(() => {
-				return lambda.getFunctionConfiguration({
+				return lambda.send(new GetFunctionConfigurationCommand({
 					FunctionName: testRunName
-				}).promise();
+				}));
 			})
 			.then(lambdaResult => {
 				functionArn = lambdaResult.FunctionArn;
 			})
 			.then(() => underTest(config))
-			.then(() => sns.listSubscriptionsByTopic({TopicArn: config.topic}).promise())
+			.then(() => sns.send(new ListSubscriptionsByTopicCommand({TopicArn: config.topic})))
 			.then(config => {
 				expect(config.Subscriptions.length).toBe(1);
 				expect(config.Subscriptions[0].Endpoint).toEqual(functionArn);
 			})
-			.then(done, done.fail);
+			.then(() => done(), done.fail);
 		});
 		it('does not add a filter policy if not requested', done =>	{
 			createLambda()
 			.then(() => underTest(config))
-			.then(() => sns.listSubscriptionsByTopic({TopicArn: config.topic}).promise())
-			.then(result => sns.getSubscriptionAttributes({SubscriptionArn: result.Subscriptions[0].SubscriptionArn}).promise())
+			.then(() => sns.send(new ListSubscriptionsByTopicCommand({TopicArn: config.topic})))
+			.then(result => sns.send(new GetSubscriptionAttributesCommand({SubscriptionArn: result.Subscriptions[0].SubscriptionArn})))
 			.then(attr => {
 				expect(attr.Attributes.FilterPolicy).toBeFalsy();
 			})
-			.then(done, done.fail);
+			.then(() => done(), done.fail);
 		});
 
 		it('adds a filter policy if requested', done =>	{
@@ -126,12 +128,12 @@ describe('addSNSEventSource', () => {
 			config['filter-policy'] = JSON.stringify(policy);
 			createLambda()
 			.then(() => underTest(config))
-			.then(() => sns.listSubscriptionsByTopic({TopicArn: config.topic}).promise())
-			.then(result => sns.getSubscriptionAttributes({SubscriptionArn: result.Subscriptions[0].SubscriptionArn}).promise())
+			.then(() => sns.send(new ListSubscriptionsByTopicCommand({TopicArn: config.topic})))
+			.then(result => sns.send(new GetSubscriptionAttributesCommand({SubscriptionArn: result.Subscriptions[0].SubscriptionArn})))
 			.then(attr => {
 				expect(JSON.parse(attr.Attributes.FilterPolicy)).toEqual(policy);
 			})
-			.then(done, done.fail);
+			.then(() => done(), done.fail);
 		});
 		it('adds a filter policy from a file if requested', done =>	{
 			const policy = {
@@ -142,27 +144,26 @@ describe('addSNSEventSource', () => {
 			config['filter-policy-file'] = policyFile;
 			createLambda()
 			.then(() => underTest(config))
-			.then(() => sns.listSubscriptionsByTopic({TopicArn: config.topic}).promise())
-			.then(result => sns.getSubscriptionAttributes({SubscriptionArn: result.Subscriptions[0].SubscriptionArn}).promise())
+			.then(() => sns.send(new ListSubscriptionsByTopicCommand({TopicArn: config.topic})))
+			.then(result => sns.send(new GetSubscriptionAttributesCommand({SubscriptionArn: result.Subscriptions[0].SubscriptionArn})))
 			.then(attr => {
 				expect(JSON.parse(attr.Attributes.FilterPolicy)).toEqual(policy);
 			})
-			.then(done, done.fail);
+			.then(() => done(), done.fail);
 		});
 		it('invokes lambda from SNS when no version is given', done => {
 			createLambda()
 			.then(() => underTest(config))
 			.then(() => {
-				return sns.publish({
+				return sns.send(new PublishCommand({
 					Message: JSON.stringify({name: 'Mike'}),
 					TopicArn: config.topic
-				}).promise();
+				}));
 			})
 			.then(() => {
 				return retry(() => {
 					console.log(`trying to get events from /aws/lambda/${testRunName}`);
-					return logs.filterLogEvents({ logGroupName: '/aws/lambda/' + testRunName, filterPattern: 'aws sns EventSubscription' })
-						.promise()
+					return logs.send(new FilterLogEventsCommand({ logGroupName: '/aws/lambda/' + testRunName, filterPattern: 'aws sns EventSubscription' }))
 						.then(logEvents => {
 							if (logEvents.events.length) {
 								return logEvents.events;
@@ -172,7 +173,7 @@ describe('addSNSEventSource', () => {
 						});
 				}, 5000, 5, undefined, undefined, Promise);
 			})
-			.then(done, done.fail);
+			.then(() => done(), done.fail);
 		});
 		it('binds to an alias, if the version is provided', done => {
 			let functionArn;
@@ -180,21 +181,21 @@ describe('addSNSEventSource', () => {
 			config.version = 'special';
 			createLambda()
 			.then(() => {
-				return lambda.getFunctionConfiguration({
+				return lambda.send(new GetFunctionConfigurationCommand({
 					FunctionName: testRunName,
 					Qualifier: 'special'
-				}).promise();
+				}));
 			})
 			.then(lambdaResult => {
 				functionArn = lambdaResult.FunctionArn;
 			})
 			.then(() => underTest(config))
-			.then(() => sns.listSubscriptionsByTopic({TopicArn: config.topic}).promise())
+			.then(() => sns.send(new ListSubscriptionsByTopicCommand({TopicArn: config.topic})))
 			.then(config => {
 				expect(config.Subscriptions.length).toBe(1);
 				expect(config.Subscriptions[0].Endpoint).toEqual(functionArn);
 			})
-			.then(done, done.fail);
+			.then(() => done(), done.fail);
 		});
 		it('invokes lambda from SNS when version is provided', done => {
 			createConfig.version = 'special';
@@ -202,16 +203,15 @@ describe('addSNSEventSource', () => {
 			createLambda()
 			.then(() => underTest(config))
 			.then(() => {
-				return sns.publish({
+				return sns.send(new PublishCommand({
 					Message: JSON.stringify({name: 'Mike'}),
 					TopicArn: config.topic
-				}).promise();
+				}));
 			})
 			.then(() => {
 				return retry(() => {
 					console.log('trying to get events from ' + '/aws/lambda/' + testRunName);
-					return logs.filterLogEvents({logGroupName: '/aws/lambda/' + testRunName, filterPattern: 'aws sns EventSubscription'})
-						.promise()
+					return logs.send(new FilterLogEventsCommand({logGroupName: '/aws/lambda/' + testRunName, filterPattern: 'aws sns EventSubscription'}))
 						.then(logEvents => {
 							if (logEvents.events.length) {
 								return logEvents.events;
@@ -221,7 +221,7 @@ describe('addSNSEventSource', () => {
 						});
 				}, 5000, 5);
 			})
-			.then(done, done.fail);
+			.then(() => done(), done.fail);
 		});
 	});
 });

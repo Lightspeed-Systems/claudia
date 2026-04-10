@@ -2,7 +2,7 @@ const listVersions = require('../src/tasks/list-versions'),
 	tmppath = require('../src/util/tmppath'),
 	create = require('../src/commands/create'),
 	update = require('../src/commands/update'),
-	aws = require('aws-sdk'),
+	{ LambdaClient } = require('@aws-sdk/client-lambda'),
 	awsRegion = require('./util/test-aws-region'),
 	fs = require('fs'),
 	fsUtil = require('../src/util/fs-util'),
@@ -16,12 +16,12 @@ describe('listVersions', () => {
 	beforeEach(() => {
 		workingdir = tmppath();
 		testRunName = 'test' + Date.now();
-		lambda = new aws.Lambda({region: awsRegion});
+		lambda = new LambdaClient({region: awsRegion});
 		newObjects = {workingdir: workingdir};
 		fs.mkdirSync(workingdir);
 	});
 	afterEach(done => {
-		destroyObjects(newObjects).then(done, done.fail);
+		destroyObjects(newObjects).then(() => done(), done.fail);
 	});
 	it('lists only latest when created without a version', (done) => {
 		fsUtil.copy('spec/test-projects/hello-world', workingdir, true);
@@ -35,7 +35,7 @@ describe('listVersions', () => {
 				{ version: '1', aliases: [] }
 			]);
 		})
-		.then(done, done.fail);
+		.then(() => done(), done.fail);
 	});
 	it('includes runtime, size and time of creation', (done) => {
 		fsUtil.copy('spec/test-projects/hello-world', workingdir, true);
@@ -49,7 +49,7 @@ describe('listVersions', () => {
 			expect(item.runtime).toBeTruthy();
 			expect(item.size).toBeTruthy();
 		})
-		.then(done, done.fail);
+		.then(() => done(), done.fail);
 
 	});
 	it('lists latest and specific version when created with a version', (done) => {
@@ -64,7 +64,7 @@ describe('listVersions', () => {
 				{ version: '1', aliases: ['dev'] }
 			]);
 		})
-		.then(done, done.fail);
+		.then(() => done(), done.fail);
 	});
 	it('lists multiple aliases assigned to the same version', (done) => {
 		fsUtil.copy('spec/test-projects/hello-world', workingdir, true);
@@ -79,7 +79,7 @@ describe('listVersions', () => {
 				{ version: '1', aliases: ['dev', 'new'] }
 			]);
 		})
-		.then(done, done.fail);
+		.then(() => done(), done.fail);
 
 	});
 
@@ -92,7 +92,7 @@ describe('listVersions', () => {
 			.then(() => update({source: workingdir, version: 'new'}))
 			.then(() => setVersion({source: workingdir, version: 'test'}))
 			.then(() => update({source: workingdir, version: 'dev'}))
-			.then(done, done.fail);
+			.then(() => done(), done.fail);
 		});
 		it('lists everything without a filter', (done) => {
 			listVersions(newObjects.lambdaFunction, lambda)
@@ -104,7 +104,7 @@ describe('listVersions', () => {
 					{ version: '3', aliases: ['dev']}
 				]);
 			})
-			.then(done, done.fail);
+			.then(() => done(), done.fail);
 		});
 		it('filters versions by number', (done) => {
 			listVersions(newObjects.lambdaFunction, lambda, 1)
@@ -113,7 +113,7 @@ describe('listVersions', () => {
 					{ version: '1', aliases: [] }
 				]);
 			})
-			.then(done, done.fail);
+			.then(() => done(), done.fail);
 		});
 		it('filters versions by string number', (done) => {
 			listVersions(newObjects.lambdaFunction, lambda, '3')
@@ -122,7 +122,7 @@ describe('listVersions', () => {
 					{ version: '3', aliases: ['dev'] }
 				]);
 			})
-			.then(done, done.fail);
+			.then(() => done(), done.fail);
 		});
 		it('lists matching single alias', (done) => {
 			listVersions(newObjects.lambdaFunction, lambda, 'dev')
@@ -131,7 +131,7 @@ describe('listVersions', () => {
 					{ version: '3', aliases: ['dev'] }
 				]);
 			})
-			.then(done, done.fail);
+			.then(() => done(), done.fail);
 		});
 		it('lists matching any alias', (done) => {
 			listVersions(newObjects.lambdaFunction, lambda, 'test')
@@ -140,7 +140,7 @@ describe('listVersions', () => {
 					{ version: '2', aliases: ['new', 'test'] }
 				]);
 			})
-			.then(done, done.fail);
+			.then(() => done(), done.fail);
 		});
 	});
 

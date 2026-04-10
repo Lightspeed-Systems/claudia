@@ -10,7 +10,9 @@ const underTest = require('../src/commands/set-version'),
 	path = require('path'),
 	callApi = require('../src/util/call-api'),
 	ArrayLogger = require('../src/util/array-logger'),
-	aws = require('aws-sdk'),
+	{ LambdaClient, GetAliasCommand, CreateAliasCommand, GetFunctionConfigurationCommand, InvokeCommand } = require('@aws-sdk/client-lambda'),
+	{ APIGatewayClient } = require('@aws-sdk/client-api-gateway'),
+	apiGwCommands = require('@aws-sdk/client-api-gateway'),
 	awsRegion = require('./util/test-aws-region');
 describe('setVersion', () => {
 	'use strict';
@@ -25,14 +27,14 @@ describe('setVersion', () => {
 	beforeEach(() => {
 		workingdir = tmppath();
 		testRunName = 'test' + Date.now();
-		lambda = new aws.Lambda({region: awsRegion});
-		apiGateway = retriableWrap(new aws.APIGateway({region: awsRegion}));
+		lambda = new LambdaClient({region: awsRegion});
+		apiGateway = retriableWrap(new APIGatewayClient({region: awsRegion}), apiGwCommands);
 		newObjects = {workingdir: workingdir};
 		fs.mkdirSync(workingdir);
 	});
 
 	afterEach(done => {
-		destroyObjects(newObjects).then(done, done.fail);
+		destroyObjects(newObjects).then(() => done(), done.fail);
 	});
 	it('fails when the options do not contain a version name', done => {
 		underTest({source: workingdir}).then(done.fail, reason => {
@@ -65,40 +67,40 @@ describe('setVersion', () => {
 			fsUtil.copy('spec/test-projects/hello-world', workingdir, true);
 			create({name: testRunName, region: awsRegion, source: workingdir, handler: 'main.handler', role: genericTestRole.get()}).then(result => {
 				newObjects.lambdaFunction = result.lambda && result.lambda.name;
-			}).then(done, done.fail);
+			}).then(() => done(), done.fail);
 		});
 		it('creates a new version alias of the lambda function', done => {
 			underTest({source: workingdir, version: 'dev'}).then(() => {
-				return lambda.getAlias({FunctionName: testRunName, Name: 'dev'}).promise();
+				return lambda.send(new GetAliasCommand({FunctionName: testRunName, Name: 'dev'}));
 			}).then(result => {
 				expect(result.FunctionVersion).toEqual('1');
-			}).then(done, done.fail);
+			}).then(() => done(), done.fail);
 		});
 		it('uses the latest numeric version', done => {
 			fsUtil.copy('spec/test-projects/echo', workingdir, true);
 			update({source: workingdir}).then(() => {
 				return underTest({source: workingdir, version: 'dev'});
 			}).then(() => {
-				return lambda.getAlias({FunctionName: testRunName, Name: 'dev'}).promise();
+				return lambda.send(new GetAliasCommand({FunctionName: testRunName, Name: 'dev'}));
 			}).then(result => {
 				expect(result.FunctionVersion).toEqual('2');
-			}).then(done, done.fail);
+			}).then(() => done(), done.fail);
 		});
 		it('migrates an alias if it already exists', done => {
 			fsUtil.copy('spec/test-projects/echo', workingdir, true);
-			lambda.createAlias({
+			lambda.send(new CreateAliasCommand({
 				FunctionName: testRunName,
 				FunctionVersion: '1',
 				Name: 'dev'
-			}).promise().then(() => {
+			})).then(() => {
 				return update({source: workingdir});
 			}).then(() => {
 				return underTest({source: workingdir, version: 'dev'});
 			}).then(() => {
-				return lambda.getAlias({FunctionName: testRunName, Name: 'dev'}).promise();
+				return lambda.send(new GetAliasCommand({FunctionName: testRunName, Name: 'dev'}));
 			}).then(result => {
 				expect(result.FunctionVersion).toEqual('2');
-			}).then(done, done.fail);
+			}).then(() => done(), done.fail);
 		});
 	});
 	describe('when the lambda project contains a web api', () => {
@@ -107,7 +109,7 @@ describe('setVersion', () => {
 			create({name: testRunName, region: awsRegion, source: workingdir, 'api-module': 'main', role: genericTestRole.get()}).then(result => {
 				newObjects.lambdaFunction = result.lambda && result.lambda.name;
 				newObjects.restApi = result.api && result.api.id;
-			}).then(done, done.fail);
+			}).then(() => done(), done.fail);
 		});
 		it('creates a new api deployment', done => {
 			underTest({source: workingdir, version: 'dev'})
@@ -121,7 +123,7 @@ describe('setVersion', () => {
 				expect(params.stageVariables).toEqual({
 					lambdaVersion: 'dev'
 				});
-			}).then(done, done.fail);
+			}).then(() => done(), done.fail);
 		});
 		it('keeps the old stage variables if they exist', done => {
 			apiGateway.createDeploymentPromise({
@@ -144,7 +146,7 @@ describe('setVersion', () => {
 					authKey: 'abs123',
 					authBucket: 'bucket123'
 				});
-			}).then(done, e => {
+			}).then(() => done(), e => {
 				console.log(JSON.stringify(e));
 				done.fail(e);
 			});
@@ -156,7 +158,7 @@ describe('setVersion', () => {
 			create({name: testRunName, region: awsRegion, source: workingdir, handler: 'main.handler', 'deploy-proxy-api': true, role: genericTestRole.get()}).then(result => {
 				newObjects.lambdaFunction = result.lambda && result.lambda.name;
 				newObjects.restApi = result.api && result.api.id;
-			}).then(done, done.fail);
+			}).then(() => done(), done.fail);
 		});
 		it('creates a new api deployment', done => {
 			underTest({source: workingdir, version: 'dev'})
@@ -171,7 +173,7 @@ describe('setVersion', () => {
 				expect(params.stageVariables).toEqual({
 					lambdaVersion: 'dev'
 				});
-			}).then(done, done.fail);
+			}).then(() => done(), done.fail);
 		});
 		it('keeps the old stage variables if they exist', done => {
 			apiGateway.createDeploymentPromise({
@@ -195,7 +197,7 @@ describe('setVersion', () => {
 					authKey: 'abs123',
 					authBucket: 'bucket123'
 				});
-			}).then(done, e => {
+			}).then(() => done(), e => {
 				console.log(JSON.stringify(e));
 				done.fail(e);
 			});
@@ -222,7 +224,7 @@ describe('setVersion', () => {
 				'apigateway.createDeployment',
 				'apigateway.setupRequestListeners',
 				'apigateway.setAcceptHeader']);
-		}).then(done, done.fail);
+		}).then(() => done(), done.fail);
 	});
 
 	describe('environment variables', () => {
@@ -244,14 +246,14 @@ describe('setVersion', () => {
 			}).then(result => {
 				newObjects.lambdaRole = result.lambda && result.lambda.role;
 				newObjects.lambdaFunction = result.lambda && result.lambda.name;
-			}).then(done, done.fail);
+			}).then(() => done(), done.fail);
 		});
 		it('does not change environment variables if set-env not provided', done => {
 			return underTest({source: workingdir, version: 'new'}, logger).then(() => {
-				return lambda.getFunctionConfiguration({
+				return lambda.send(new GetFunctionConfigurationCommand({
 					FunctionName: testRunName,
 					Qualifier: 'new'
-				}).promise();
+				}));
 			}).then(configuration => {
 				expect(configuration.Environment).toEqual({
 					Variables: {
@@ -260,24 +262,24 @@ describe('setVersion', () => {
 					}
 				});
 			}).then(() => {
-				return lambda.invoke({
+				return lambda.send(new InvokeCommand({
 					FunctionName: testRunName,
 					Qualifier: 'new',
 					InvocationType: 'RequestResponse'
-				}).promise();
+				}));
 			}).then(result => {
 				const env = JSON.parse(result.Payload);
 				expect(Object.keys(env).filter(nonStandard).sort()).toEqual(['XPATH', 'YPATH']);
 				expect(env.XPATH).toEqual('/var/www');
 				expect(env.YPATH).toEqual('/var/lib');
-			}).then(done, done.fail);
+			}).then(() => done(), done.fail);
 		});
 		it('changes environment variables if set-env is provided', done => {
 			return underTest({source: workingdir, version: 'new', 'set-env': 'XPATH=/opt,ZPATH=/usr'}, logger).then(() => {
-				return lambda.getFunctionConfiguration({
+				return lambda.send(new GetFunctionConfigurationCommand({
 					FunctionName: testRunName,
 					Qualifier: 'new'
-				}).promise();
+				}));
 			}).then(configuration => {
 				expect(configuration.Environment).toEqual({
 					Variables: {
@@ -286,25 +288,25 @@ describe('setVersion', () => {
 					}
 				});
 			}).then(() => {
-				return lambda.invoke({
+				return lambda.send(new InvokeCommand({
 					FunctionName: testRunName,
 					Qualifier: 'new',
 					InvocationType: 'RequestResponse'
-				}).promise();
+				}));
 			}).then(result => {
 				const env = JSON.parse(result.Payload);
 				expect(Object.keys(env).filter(nonStandard).sort()).toEqual(['XPATH', 'ZPATH']);
 				expect(env.XPATH).toEqual('/opt');
 				expect(env.YPATH).toBeFalsy();
 				expect(env.ZPATH).toEqual('/usr');
-			}).then(done, done.fail);
+			}).then(() => done(), done.fail);
 		});
 		it('updates environment variables if update-env is provided', done => {
 			return underTest({source: workingdir, version: 'new', 'update-env': 'XPATH=/opt,ZPATH=/usr'}, logger).then(() => {
-				return lambda.getFunctionConfiguration({
+				return lambda.send(new GetFunctionConfigurationCommand({
 					FunctionName: testRunName,
 					Qualifier: 'new'
-				}).promise();
+				}));
 			}).then(configuration => {
 				expect(configuration.Environment).toEqual({
 					Variables: {
@@ -314,28 +316,28 @@ describe('setVersion', () => {
 					}
 				});
 			}).then(() => {
-				return lambda.invoke({
+				return lambda.send(new InvokeCommand({
 					FunctionName: testRunName,
 					Qualifier: 'new',
 					InvocationType: 'RequestResponse'
-				}).promise();
+				}));
 			}).then(result => {
 				const env = JSON.parse(result.Payload);
 				expect(Object.keys(env).filter(nonStandard).sort()).toEqual(['XPATH', 'YPATH', 'ZPATH']);
 				expect(env.XPATH).toEqual('/opt');
 				expect(env.YPATH).toEqual('/var/lib');
 				expect(env.ZPATH).toEqual('/usr');
-			}).then(done, done.fail);
+			}).then(() => done(), done.fail);
 		});
 
 		it('changes env variables specified in a JSON file', done => {
 			const envpath = path.join(workingdir, 'env.json');
 			fs.writeFileSync(envpath, JSON.stringify({'XPATH': '/opt', 'ZPATH': '/usr'}), 'utf8');
 			return underTest({source: workingdir, version: 'new', 'set-env-from-json': envpath}, logger).then(() => {
-				return lambda.getFunctionConfiguration({
+				return lambda.send(new GetFunctionConfigurationCommand({
 					FunctionName: testRunName,
 					Qualifier: 'new'
-				}).promise();
+				}));
 			}).then(configuration => {
 				expect(configuration.Environment).toEqual({
 					Variables: {
@@ -344,27 +346,27 @@ describe('setVersion', () => {
 					}
 				});
 			}).then(() => {
-				return lambda.invoke({
+				return lambda.send(new InvokeCommand({
 					FunctionName: testRunName,
 					Qualifier: 'new',
 					InvocationType: 'RequestResponse'
-				}).promise();
+				}));
 			}).then(result => {
 				const env = JSON.parse(result.Payload);
 				expect(Object.keys(env).filter(nonStandard).sort()).toEqual(['XPATH', 'ZPATH']);
 				expect(env.XPATH).toEqual('/opt');
 				expect(env.YPATH).toBeFalsy();
 				expect(env.ZPATH).toEqual('/usr');
-			}).then(done, done.fail);
+			}).then(() => done(), done.fail);
 		});
 		it('updates env variables specified in a JSON file', done => {
 			const envpath = path.join(workingdir, 'env.json');
 			fs.writeFileSync(envpath, JSON.stringify({'XPATH': '/opt', 'ZPATH': '/usr'}), 'utf8');
 			return underTest({source: workingdir, version: 'new', 'update-env-from-json': envpath}, logger).then(() => {
-				return lambda.getFunctionConfiguration({
+				return lambda.send(new GetFunctionConfigurationCommand({
 					FunctionName: testRunName,
 					Qualifier: 'new'
-				}).promise();
+				}));
 			}).then(configuration => {
 				expect(configuration.Environment).toEqual({
 					Variables: {
@@ -374,18 +376,18 @@ describe('setVersion', () => {
 					}
 				});
 			}).then(() => {
-				return lambda.invoke({
+				return lambda.send(new InvokeCommand({
 					FunctionName: testRunName,
 					Qualifier: 'new',
 					InvocationType: 'RequestResponse'
-				}).promise();
+				}));
 			}).then(result => {
 				const env = JSON.parse(result.Payload);
 				expect(Object.keys(env).filter(nonStandard).sort()).toEqual(['XPATH', 'YPATH', 'ZPATH']);
 				expect(env.XPATH).toEqual('/opt');
 				expect(env.YPATH).toEqual('/var/lib');
 				expect(env.ZPATH).toEqual('/usr');
-			}).then(done, done.fail);
+			}).then(() => done(), done.fail);
 		});
 
 		it('refuses to work if reading the variables fails', done => {

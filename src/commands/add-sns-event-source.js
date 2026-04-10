@@ -1,6 +1,8 @@
 const loadConfig = require('../util/loadconfig'),
 	fsPromise = require('../util/fs-promise'),
-	aws = require('aws-sdk');
+	{ LambdaClient, GetFunctionConfigurationCommand, AddPermissionCommand } = require('@aws-sdk/client-lambda'),
+	{ SNSClient, SubscribeCommand } = require('@aws-sdk/client-sns'),
+	awsClientConfig = require('../util/aws-client-config');
 
 module.exports = function addSNSEventSource(options) {
 	'use strict';
@@ -8,10 +10,10 @@ module.exports = function addSNSEventSource(options) {
 		lambda,
 		sns;
 	const initServices = function () {
-			lambda = new aws.Lambda({region: lambdaConfig.region});
-			sns = new aws.SNS({region: lambdaConfig.region});
+			lambda = new LambdaClient(awsClientConfig(lambdaConfig.region, options));
+			sns = new SNSClient(awsClientConfig(lambdaConfig.region, options));
 		},
-		getLambda = () => lambda.getFunctionConfiguration({FunctionName: lambdaConfig.name, Qualifier: options.version}).promise(),
+		getLambda = () => lambda.send(new GetFunctionConfigurationCommand({FunctionName: lambdaConfig.name, Qualifier: options.version})),
 		readConfig = function () {
 			return loadConfig(options, {lambda: {name: true, region: true}})
 				.then(config => {
@@ -25,14 +27,14 @@ module.exports = function addSNSEventSource(options) {
 				});
 		},
 		addInvokePermission = function () {
-			return lambda.addPermission({
+			return lambda.send(new AddPermissionCommand({
 				Action: 'lambda:InvokeFunction',
 				FunctionName: lambdaConfig.name,
 				Principal: 'sns.amazonaws.com',
 				SourceArn: options.topic,
 				Qualifier: options.version,
 				StatementId: options.topic.split(':').slice(3).join('-')  + '-' + Date.now()
-			}).promise();
+			}));
 		},
 		readPolicy = function () {
 			if (options['filter-policy-file']) {
@@ -54,7 +56,7 @@ module.exports = function addSNSEventSource(options) {
 				}
 				return params;
 			})
-			.then(params => sns.subscribe(params).promise());
+			.then(params => sns.send(new SubscribeCommand(params)));
 		};
 	if (!options.topic) {
 		return Promise.reject('SNS topic not specified. please provide it with --topic');

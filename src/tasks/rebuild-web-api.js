@@ -1,4 +1,5 @@
-const aws = require('aws-sdk'),
+const apiGwCommands = require('@aws-sdk/client-api-gateway'),
+	{ APIGatewayClient } = require('@aws-sdk/client-api-gateway'),
 	validAuthType = require('../util/valid-auth-type'),
 	sequentialPromiseMap = require('sequential-promise-map'),
 	validCredentials = require('../util/valid-credentials'),
@@ -11,16 +12,18 @@ const aws = require('aws-sdk'),
 	flattenRequestParameters = require('./flatten-request-parameters'),
 	patchBinaryTypes = require('./patch-binary-types'),
 	clearApi = require('./clear-api'),
-	registerAuthorizers = require('./register-authorizers');
-module.exports = function rebuildWebApi(functionName, functionVersion, restApiId, apiConfig, ownerAccount, awsPartition, awsRegion, optionalLogger, configCacheStageVar) {
+	registerAuthorizers = require('./register-authorizers'),
+	awsClientConfig = require('../util/aws-client-config');
+module.exports = function rebuildWebApi(functionName, functionVersion, restApiId, apiConfig, ownerAccount, awsPartition, awsRegion, optionalLogger, configCacheStageVar, options) {
 	'use strict';
 	let authorizerIds;
 	const logger = optionalLogger || new NullLogger(),
 		apiGateway = retriableWrap(
 			loggingWrap(
-				new aws.APIGateway({region: awsRegion}),
+				new APIGatewayClient(awsClientConfig(awsRegion, options)),
 				{log: logger.logApiCall, logName: 'apigateway'}
 			),
+			apiGwCommands,
 			() => logger.logApiCall('rate-limited by AWS, waiting before retry')
 		),
 		configHash = safeHash(apiConfig),
@@ -262,7 +265,7 @@ module.exports = function rebuildWebApi(functionName, functionVersion, restApiId
 			});
 		},
 		rebuildApi = function () {
-			return allowApiInvocation(functionName, functionVersion, restApiId, ownerAccount, awsPartition, awsRegion)
+			return allowApiInvocation(functionName, functionVersion, restApiId, ownerAccount, awsPartition, awsRegion, undefined, options)
 			.then(() => cacheRootId())
 			.then(() => sequentialPromiseMap(Object.keys(apiConfig.routes), configurePath))
 			.then(() => {
@@ -292,7 +295,7 @@ module.exports = function rebuildWebApi(functionName, functionVersion, restApiId
 		},
 		configureAuthorizers = function () {
 			if (apiConfig.authorizers && apiConfig.authorizers !== {}) {
-				return registerAuthorizers(apiConfig.authorizers, restApiId, ownerAccount, awsPartition, awsRegion, functionVersion, logger)
+				return registerAuthorizers(apiConfig.authorizers, restApiId, ownerAccount, awsPartition, awsRegion, functionVersion, logger, options)
 				.then(result => {
 					authorizerIds = result;
 				});

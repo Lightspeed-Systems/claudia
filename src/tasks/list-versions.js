@@ -1,4 +1,5 @@
 const extractAliases = require('./extract-aliases'),
+	{ ListVersionsByFunctionCommand, ListAliasesCommand } = require('@aws-sdk/client-lambda'),
 	extractValues = function (resultItem) {
 		'use strict';
 		return {
@@ -11,7 +12,7 @@ const extractAliases = require('./extract-aliases'),
 module.exports = async function listVersions(lambdaName, lambda, filter) {
 	'use strict';
 	const listVersionsFromMarker = async marker => {
-			const results = await lambda.listVersionsByFunction({FunctionName: lambdaName, Marker: marker}).promise(),
+			const results = await lambda.send(new ListVersionsByFunctionCommand({FunctionName: lambdaName, Marker: marker})),
 				versions = results.Versions,
 				next = results.NextMarker,
 				remainingVersions = next && await listVersionsFromMarker(next);
@@ -29,7 +30,7 @@ module.exports = async function listVersions(lambdaName, lambda, filter) {
 			return versionList.filter(item => String(item.version) === stringVersion || item.aliases.includes(stringVersion));
 		},
 		awsVersions = await listVersionsFromMarker(),
-		awsAliases = await lambda.listAliases({FunctionName: lambdaName}).promise(),
+		awsAliases = await lambda.send(new ListAliasesCommand({FunctionName: lambdaName})),
 		claudiaAliases = extractAliases(awsAliases),
 		claudiaVersions = awsVersions.map(extractValues);
 	return filterResults(claudiaVersions.map(versionObject => Object.assign(versionObject, {

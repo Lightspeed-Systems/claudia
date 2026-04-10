@@ -1,4 +1,14 @@
-const aws = require('aws-sdk'),
+const { LambdaClient, DeleteFunctionCommand } = require('@aws-sdk/client-lambda'),
+	{ CloudWatchLogsClient, DeleteLogGroupCommand } = require('@aws-sdk/client-cloudwatch-logs'),
+	{ APIGatewayClient } = require('@aws-sdk/client-api-gateway'),
+	apiGwCommands = require('@aws-sdk/client-api-gateway'),
+	{ S3Client, DeleteObjectCommand, ListObjectsCommand, DeleteBucketCommand } = require('@aws-sdk/client-s3'),
+	{ IoTClient, DeleteTopicRuleCommand } = require('@aws-sdk/client-iot'),
+	{ SNSClient, DeleteTopicCommand } = require('@aws-sdk/client-sns'),
+	{ SQSClient, DeleteQueueCommand } = require('@aws-sdk/client-sqs'),
+	{ IAMClient } = require('@aws-sdk/client-iam'),
+	{ CloudWatchEventsClient, ListTargetsByRuleCommand, RemoveTargetsCommand, DeleteRuleCommand } = require('@aws-sdk/client-cloudwatch-events'),
+	{ CognitoIdentityProviderClient, DeleteUserPoolCommand } = require('@aws-sdk/client-cognito-identity-provider'),
 	destroyRole = require('../../src/util/destroy-role'),
 	fsUtil = require('../../src/util/fs-util'),
 	retriableWrap = require('../../src/util/retriable-wrap'),
@@ -7,36 +17,36 @@ const aws = require('aws-sdk'),
 
 module.exports = function destroyObjects(newObjects) {
 	'use strict';
-	const lambda = new aws.Lambda({ region: awsRegion }),
-		logs = new aws.CloudWatchLogs({ region: awsRegion }),
-		apiGatewayPromise = retriableWrap(new aws.APIGateway({ region: awsRegion })),
-		s3 = new aws.S3({ region: awsRegion }),
-		iot = new aws.Iot({ region: awsRegion }),
-		sns = new aws.SNS({ region: awsRegion }),
-		sqs = new aws.SQS({ region: awsRegion }),
-		iam = new aws.IAM({ region: awsRegion }),
-		events = new aws.CloudWatchEvents({ region: awsRegion }),
-		cognitoIdentityServiceProvider = new aws.CognitoIdentityServiceProvider({ region: awsRegion }),
+	const lambda = new LambdaClient({ region: awsRegion }),
+		logs = new CloudWatchLogsClient({ region: awsRegion }),
+		apiGatewayPromise = retriableWrap(new APIGatewayClient({ region: awsRegion }), apiGwCommands),
+		s3 = new S3Client({ region: awsRegion }),
+		iot = new IoTClient({ region: awsRegion }),
+		sns = new SNSClient({ region: awsRegion }),
+		sqs = new SQSClient({ region: awsRegion }),
+		iam = new IAMClient({ region: awsRegion }),
+		events = new CloudWatchEventsClient({ region: awsRegion }),
+		cognitoIdentityServiceProvider = new CognitoIdentityProviderClient({ region: awsRegion }),
 		destroyRule = function (ruleName) {
-			return events.listTargetsByRule({ Rule: ruleName }).promise()
+			return events.send(new ListTargetsByRuleCommand({ Rule: ruleName }))
 			.then(config => {
 				const ids = config.Targets.map(target => target.Id);
 				if (ids.length) {
-					return events.removeTargets({ Rule: ruleName, Ids: ids }).promise();
+					return events.send(new RemoveTargetsCommand({ Rule: ruleName, Ids: ids }));
 				}
 			})
-			.then(() => events.deleteRule({ Name: ruleName }).promise());
+			.then(() => events.send(new DeleteRuleCommand({ Name: ruleName })));
 		},
 		destroyBucket = function (bucketName) {
 			const deleteSingleObject = function (ob) {
-				return s3.deleteObject({
+				return s3.send(new DeleteObjectCommand({
 					Bucket: bucketName,
 					Key: ob.Key
-				}).promise();
+				}));
 			};
-			return s3.listObjects({Bucket: bucketName}).promise()
+			return s3.send(new ListObjectsCommand({Bucket: bucketName}))
 			.then(result => Promise.all(result.Contents.map(deleteSingleObject)))
-			.then(() => s3.deleteBucket({ Bucket: bucketName }).promise());
+			.then(() => s3.send(new DeleteBucketCommand({ Bucket: bucketName })));
 		},
 		removeRestApi = () => {
 			if (newObjects.restApi) {
@@ -47,25 +57,25 @@ module.exports = function destroyObjects(newObjects) {
 		},
 		removeIotRule = () => {
 			if (newObjects.iotTopicRule) {
-				return iot.deleteTopicRule({ruleName: newObjects.iotTopicRule}).promise();
+				return iot.send(new DeleteTopicRuleCommand({ruleName: newObjects.iotTopicRule}));
 			}
 		},
 		removeLambdaFunction = () => {
 			if (newObjects.lambdaFunction) {
-				return lambda.deleteFunction({ FunctionName: newObjects.lambdaFunction }).promise();
+				return lambda.send(new DeleteFunctionCommand({ FunctionName: newObjects.lambdaFunction }));
 			}
 		},
 		removeLambdaLogs = () => {
 			if (newObjects.lambdaFunction) {
-				return logs.deleteLogGroup({ logGroupName: '/aws/lambda/' + newObjects.lambdaFunction }).promise()
+				return logs.send(new DeleteLogGroupCommand({ logGroupName: '/aws/lambda/' + newObjects.lambdaFunction }))
 				.catch(() => true);
 			}
 		},
 		removeSnsTopic = () => {
 			if (newObjects.snsTopic) {
-				return sns.deleteTopic({
+				return sns.send(new DeleteTopicCommand({
 					TopicArn: newObjects.snsTopic
-				}).promise();
+				}));
 			}
 		},
 		removeEventRule = () => {
@@ -80,7 +90,7 @@ module.exports = function destroyObjects(newObjects) {
 		},
 		removeCustomLogs = () => {
 			if (newObjects.logGroup) {
-				return logs.deleteLogGroup({ logGroupName: newObjects.logGroup }).promise();
+				return logs.send(new DeleteLogGroupCommand({ logGroupName: newObjects.logGroup }));
 			}
 		},
 		removeS3Bucket = () => {
@@ -90,12 +100,12 @@ module.exports = function destroyObjects(newObjects) {
 		},
 		removeCognitoPool = () => {
 			if (newObjects.userPoolId) {
-				return cognitoIdentityServiceProvider.deleteUserPool({ UserPoolId: newObjects.userPoolId }).promise();
+				return cognitoIdentityServiceProvider.send(new DeleteUserPoolCommand({ UserPoolId: newObjects.userPoolId }));
 			}
 		},
 		removeSQSQueue = () => {
 			if (newObjects.sqsQueueUrl) {
-				return sqs.deleteQueue({QueueUrl: newObjects.sqsQueueUrl}).promise();
+				return sqs.send(new DeleteQueueCommand({QueueUrl: newObjects.sqsQueueUrl}));
 			}
 		};
 

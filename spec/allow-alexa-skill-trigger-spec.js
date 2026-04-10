@@ -2,7 +2,7 @@ const underTest = require('../src/commands/allow-alexa-skill-trigger'),
 	create = require('../src/commands/create'),
 	destroyObjects = require('./util/destroy-objects'),
 	tmppath = require('../src/util/tmppath'),
-	aws = require('aws-sdk'),
+	{ LambdaClient, GetPolicyCommand } = require('@aws-sdk/client-lambda'),
 	fs = require('fs'),
 	fsUtil = require('../src/util/fs-util'),
 	awsRegion = require('./util/test-aws-region');
@@ -13,13 +13,13 @@ describe('allowAlexaSkillTrigger', () => {
 	let workingdir, testRunName, newObjects, lambda;
 	beforeEach(() => {
 		workingdir = tmppath();
-		lambda = new aws.Lambda({ region: awsRegion });
+		lambda = new LambdaClient({ region: awsRegion });
 		testRunName = 'test' + Date.now();
 		newObjects = { workingdir: workingdir };
 		fs.mkdirSync(workingdir);
 	});
 	afterEach(done => {
-		destroyObjects(newObjects).then(done, done.fail);
+		destroyObjects(newObjects).then(() => done(), done.fail);
 	});
 	it('allows Alexa Skill to trigger Lambda', done => {
 		const createConfig = {
@@ -40,13 +40,13 @@ describe('allowAlexaSkillTrigger', () => {
 				newObjects.lambdaFunction = result.lambda && result.lambda.name;
 			})
 			.then(() => underTest(config))
-			.then(() => lambda.getPolicy({ FunctionName: testRunName, Qualifier: 'dev' }).promise())
+			.then(() => lambda.send(new GetPolicyCommand({ FunctionName: testRunName, Qualifier: 'dev' })))
 			.then(result => JSON.parse(result.Policy).Statement[0])
 			.then(statement => {
 				expect(statement.Effect).toEqual('Allow');
 				expect(statement.Principal.Service).toEqual('alexa-appkit.amazon.com');
 				expect(statement.Action).toEqual('lambda:InvokeFunction');
 			})
-			.then(done, done.fail);
+			.then(() => done(), done.fail);
 	});
 });

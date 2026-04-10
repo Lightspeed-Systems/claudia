@@ -1,21 +1,23 @@
 const loadConfig = require('../util/loadconfig'),
 	iamNameSanitize = require('../util/iam-name-sanitize'),
-	aws = require('aws-sdk'),
-	getOwnerInfo = require('../tasks/get-owner-info');
+	{ LambdaClient, GetFunctionConfigurationCommand, AddPermissionCommand } = require('@aws-sdk/client-lambda'),
+	{ CognitoIdentityProviderClient, DescribeUserPoolCommand, UpdateUserPoolCommand } = require('@aws-sdk/client-cognito-identity-provider'),
+	getOwnerInfo = require('../tasks/get-owner-info'),
+	awsClientConfig = require('../util/aws-client-config');
 module.exports = function addCognitoUserPoolTrigger(options, optionalLogger) {
 	'use strict';
 	let lambdaConfig,
 		lambda,
 		cognito;
 	const initServices = function () {
-			lambda = new aws.Lambda({region: lambdaConfig.region});
-			cognito = new aws.CognitoIdentityServiceProvider({region: lambdaConfig.region});
+			lambda = new LambdaClient(awsClientConfig(lambdaConfig.region, options));
+			cognito = new CognitoIdentityProviderClient(awsClientConfig(lambdaConfig.region, options));
 		},
 		readConfig = function () {
 			return loadConfig(options, {lambda: {name: true, region: true}})
 				.then(config => lambdaConfig = config.lambda)
 				.then(initServices)
-				.then(() => lambda.getFunctionConfiguration({FunctionName: lambdaConfig.name, Qualifier: options.version}).promise())
+				.then(() => lambda.send(new GetFunctionConfigurationCommand({FunctionName: lambdaConfig.name, Qualifier: options.version})))
 				.then(result => {
 					lambdaConfig.arn = result.FunctionArn;
 					lambdaConfig.version = result.Version;
@@ -26,17 +28,17 @@ module.exports = function addCognitoUserPoolTrigger(options, optionalLogger) {
 				statementId: iamNameSanitize('lambda_' + Date.now()),
 				poolArn: poolArn
 			};
-			return lambda.addPermission({
+			return lambda.send(new AddPermissionCommand({
 				Action: 'lambda:InvokeFunction',
 				FunctionName: lambdaConfig.name,
 				Principal: 'cognito-idp.amazonaws.com',
 				SourceArn: poolArn,
 				Qualifier: options.version,
 				StatementId: result.statementId
-			}).promise().then(() => result);
+			})).then(() => result);
 		},
 		getPoolArn = function () {
-			return getOwnerInfo(options.region, optionalLogger)
+			return getOwnerInfo(options.region, optionalLogger, options)
 				.then(ownerInfo => `arn:${ownerInfo.partition}:cognito-idp:${lambdaConfig.region}:${ownerInfo.account}:userpool/${options['user-pool-id']}`);
 		},
 		cleanUpPoolConfig = function (data) {
@@ -52,15 +54,15 @@ module.exports = function addCognitoUserPoolTrigger(options, optionalLogger) {
 			}
 		},
 		patchPool = function () {
-			return cognito.describeUserPool({
+			return cognito.send(new DescribeUserPoolCommand({
 				UserPoolId: options['user-pool-id']
-			}).promise().then(result => {
+			})).then(result => {
 				const data = result.UserPool;
 				data.UserPoolId = data.Id;
 				data.LambdaConfig = data.LambdaConfig || {};
 				options.events.split(',').forEach(name => data.LambdaConfig[name] = lambdaConfig.arn);
 				cleanUpPoolConfig(data);
-				return cognito.updateUserPool(data).promise();
+				return cognito.send(new UpdateUserPoolCommand(data));
 			});
 		};
 	if (!options.events) {

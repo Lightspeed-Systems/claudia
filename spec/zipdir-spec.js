@@ -61,7 +61,7 @@ describe('zipdir', () => {
 			expect(trimSlash(path.dirname(zipfile))).toEqual(trimSlash(os.tmpdir()));
 			expect(fs.readFileSync(path.join(unpacked, 'root.txt'), 'utf8')).toEqual('text1');
 			expect(fs.readFileSync(path.join(unpacked, 'subdir', 'sub.txt'), 'utf8')).toEqual('text2');
-		}).then(done, done.fail);
+		}).then(() => done(), done.fail);
 	});
 	it('removes the original dir if successful', done => {
 		const original = path.join(workingdir, 'original');
@@ -70,7 +70,7 @@ describe('zipdir', () => {
 		fs.writeFileSync(path.join(original, 'root.txt'), 'text1', 'utf8');
 		underTest(original).then(() => {
 			expect(fs.existsSync(original)).toBeFalsy();
-		}).then(done, done.fail);
+		}).then(() => done(), done.fail);
 	});
 });
 

@@ -1,6 +1,7 @@
-const aws = require('aws-sdk'),
+const { LambdaClient } = require('@aws-sdk/client-lambda'),
 	loadConfig = require('../util/loadconfig'),
-	listVersions = require('../tasks/list-versions');
+	listVersions = require('../tasks/list-versions'),
+	awsClientConfig = require('../util/aws-client-config');
 module.exports = async function list(options /*, optionalLogger*/) {
 	'use strict';
 	const header = ['#\ttime                        \tsize\truntime\taliases'],
@@ -21,7 +22,7 @@ module.exports = async function list(options /*, optionalLogger*/) {
 			);
 		},
 		config = await loadConfig(options, {lambda: {name: true, region: true}}),
-		lambda = new aws.Lambda({region: config.lambda.region}),
+		lambda = new LambdaClient(awsClientConfig(config.lambda.region, options)),
 		versionList = await listVersions(config.lambda.name, lambda, options.version);
 
 	if (!formatter) {

@@ -1,20 +1,24 @@
-const aws = require('aws-sdk'),
+const apiGwCommands = require('@aws-sdk/client-api-gateway'),
+	{ APIGatewayClient } = require('@aws-sdk/client-api-gateway'),
+	{ LambdaClient, GetFunctionConfigurationCommand } = require('@aws-sdk/client-lambda'),
 	loggingWrap = require('../util/logging-wrap'),
 	retriableWrap = require('../util/retriable-wrap'),
 	allowApiInvocation = require('./allow-api-invocation'),
 	NullLogger = require('../util/null-logger'),
-	sequentialPromiseMap = require('sequential-promise-map');
-module.exports = function registerAuthorizers(authorizerMap, apiId, ownerAccount, awsPartition, awsRegion, functionVersion, optionalLogger) {
+	sequentialPromiseMap = require('sequential-promise-map'),
+	awsClientConfig = require('../util/aws-client-config');
+module.exports = function registerAuthorizers(authorizerMap, apiId, ownerAccount, awsPartition, awsRegion, functionVersion, optionalLogger, options) {
 	'use strict';
 	const logger = optionalLogger || new NullLogger(),
 		apiGateway = retriableWrap(
 			loggingWrap(
-				new aws.APIGateway({region: awsRegion}),
+				new APIGatewayClient(awsClientConfig(awsRegion, options)),
 				{log: logger.logApiCall, logName: 'apigateway'}
 			),
+			apiGwCommands,
 			() => logger.logApiCall('rate-limited by AWS, waiting before retry')
 		),
-		lambda = loggingWrap(new aws.Lambda({region: awsRegion}), {log: logger.logApiCall, logName: 'lambda'}),
+		lambda = loggingWrap(new LambdaClient(awsClientConfig(awsRegion, options)), {log: logger.logApiCall, logName: 'lambda'}),
 		removeAuthorizer = function (authConfig) {
 			return apiGateway.deleteAuthorizerPromise({
 				authorizerId: authConfig.id,
@@ -28,7 +32,7 @@ module.exports = function registerAuthorizers(authorizerMap, apiId, ownerAccount
 			if (authConfig.lambdaArn) {
 				return Promise.resolve(authConfig.lambdaArn);
 			} else if (authConfig.lambdaName) {
-				return lambda.getFunctionConfiguration({FunctionName: authConfig.lambdaName}).promise()
+				return lambda.send(new GetFunctionConfigurationCommand({FunctionName: authConfig.lambdaName}))
 				.then(lambdaConfig => {
 					let suffix = '';
 					if (authConfig.lambdaVersion === true) {
@@ -50,7 +54,7 @@ module.exports = function registerAuthorizers(authorizerMap, apiId, ownerAccount
 				authLambdaQualifier = functionVersion;
 			}
 			if (authConfig.lambdaName) {
-				return allowApiInvocation(authConfig.lambdaName, authLambdaQualifier, apiId, ownerAccount, awsPartition, awsRegion, 'authorizers/*');
+				return allowApiInvocation(authConfig.lambdaName, authLambdaQualifier, apiId, ownerAccount, awsPartition, awsRegion, 'authorizers/*', options);
 			} else {
 				return Promise.resolve();
 			}

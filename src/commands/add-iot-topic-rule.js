@@ -1,6 +1,8 @@
 const loadConfig = require('../util/loadconfig'),
 	iamNameSanitize = require('../util/iam-name-sanitize'),
-	aws = require('aws-sdk');
+	{ LambdaClient, GetFunctionConfigurationCommand, AddPermissionCommand } = require('@aws-sdk/client-lambda'),
+	{ IoTClient, GetTopicRuleCommand, CreateTopicRuleCommand } = require('@aws-sdk/client-iot'),
+	awsClientConfig = require('../util/aws-client-config');
 
 module.exports = function addIOTTopicRuleEventSource(options) {
 	'use strict';
@@ -9,14 +11,14 @@ module.exports = function addIOTTopicRuleEventSource(options) {
 		ruleName,
 		iot;
 	const initServices = function () {
-			lambda = new aws.Lambda({region: lambdaConfig.region});
-			iot = new aws.Iot({region: lambdaConfig.region});
+			lambda = new LambdaClient(awsClientConfig(lambdaConfig.region, options));
+			iot = new IoTClient(awsClientConfig(lambdaConfig.region, options));
 		},
 		readConfig = function () {
 			return loadConfig(options, {lambda: {name: true, region: true}})
 				.then(config => lambdaConfig = config.lambda)
 				.then(initServices)
-				.then(() => lambda.getFunctionConfiguration({FunctionName: lambdaConfig.name, Qualifier: options.version}).promise())
+				.then(() => lambda.send(new GetFunctionConfigurationCommand({FunctionName: lambdaConfig.name, Qualifier: options.version})))
 				.then(result => {
 					lambdaConfig.arn = result.FunctionArn;
 					lambdaConfig.version = result.Version;
@@ -25,22 +27,21 @@ module.exports = function addIOTTopicRuleEventSource(options) {
 				});
 		},
 		addInvokePermission = function (ruleArn) {
-			return lambda.addPermission({
+			return lambda.send(new AddPermissionCommand({
 				Action: 'lambda:InvokeFunction',
 				FunctionName: lambdaConfig.name,
 				Principal: 'iot.amazonaws.com',
 				SourceArn: ruleArn,
 				Qualifier: options.version,
 				StatementId: iamNameSanitize(ruleName + '-' + Date.now())
-			}).promise().then(() => ruleArn);
+			})).then(() => ruleArn);
 		},
 		getRuleArn = function () {
-			return iot.getTopicRule({ruleName: ruleName})
-				.promise()
+			return iot.send(new GetTopicRuleCommand({ruleName: ruleName}))
 				.then(result => result.ruleArn);
 		},
 		addRule = function () {
-			return iot.createTopicRule({
+			return iot.send(new CreateTopicRuleCommand({
 				ruleName: ruleName,
 				topicRulePayload: {
 					sql: options.sql,
@@ -53,7 +54,7 @@ module.exports = function addIOTTopicRuleEventSource(options) {
 						}
 					}]
 				}
-			}).promise();
+			}));
 		},
 		formatResult = function (ruleArn) {
 			return {

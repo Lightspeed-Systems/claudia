@@ -6,7 +6,9 @@ const underTest = require('../src/commands/add-kinesis-event-source'),
 	retry = require('oh-no-i-insist'),
 	fs = require('fs'),
 	path = require('path'),
-	aws = require('aws-sdk'),
+	{ KinesisClient, CreateStreamCommand, DescribeStreamCommand, DeleteStreamCommand, PutRecordCommand } = require('@aws-sdk/client-kinesis'),
+	{ CloudWatchLogsClient, FilterLogEventsCommand } = require('@aws-sdk/client-cloudwatch-logs'),
+	{ LambdaClient, ListEventSourceMappingsCommand } = require('@aws-sdk/client-lambda'),
 	awsRegion = require('./util/test-aws-region');
 describe('addKinesisEventSource', () => {
 	'use strict';
@@ -15,17 +17,17 @@ describe('addKinesisEventSource', () => {
 	let workingdir, testRunName, newObjects, config, logs, lambda, kinesis, streamDescription;
 	beforeAll((done) => {
 		console.log('creating the kinesis stream');
-		kinesis = new aws.Kinesis({region: awsRegion});
-		kinesis.createStream({
+		kinesis = new KinesisClient({region: awsRegion});
+		kinesis.send(new CreateStreamCommand({
 			StreamName: streamName,
 			ShardCount: 1
-		}).promise()
+		}))
 		.then(() => {
 			return retry(() => {
 				console.log('waiting for the stream to activate');
-				return kinesis.describeStream({
+				return kinesis.send(new DescribeStreamCommand({
 					StreamName: streamName
-				}).promise()
+				}))
 				.then(result => {
 					if (result.StreamDescription.StreamStatus === 'ACTIVE') {
 						return result.StreamDescription;
@@ -36,21 +38,20 @@ describe('addKinesisEventSource', () => {
 		})
 		.then(streamDesc => streamDescription = streamDesc)
 		.then(() => console.log('created the kinesis stream'))
-		.then(done, done.fail);
+		.then(() => done(), done.fail);
 	});
 	afterAll((done) => {
 		console.log('deleting the kinesis stream');
-		done();
-		kinesis.deleteStream({
+		kinesis.send(new DeleteStreamCommand({
 			StreamName: streamName
-		}).promise()
+		}))
 		.then(() => console.log('deleted the kinesis stream'))
-		.then(done, done.fail);
+		.then(() => done(), done.fail);
 	});
 	beforeEach(() => {
 		workingdir = tmppath();
-		logs = new aws.CloudWatchLogs({ region: awsRegion });
-		lambda = new aws.Lambda({ region: awsRegion });
+		logs = new CloudWatchLogsClient({ region: awsRegion });
+		lambda = new LambdaClient({ region: awsRegion });
 		testRunName = 'test' + Date.now();
 		newObjects = { workingdir: workingdir };
 		fs.mkdirSync(workingdir);
@@ -62,7 +63,7 @@ describe('addKinesisEventSource', () => {
 		};
 	});
 	afterEach(done => {
-		destroyObjects(newObjects).then(done, done.fail);
+		destroyObjects(newObjects).then(() => done(), done.fail);
 	});
 	it('fails when the stream is not defined in options', done => {
 		config.stream = '';
@@ -105,11 +106,11 @@ describe('addKinesisEventSource', () => {
 					});
 			},
 			publishToStream = function (info) {
-				return kinesis.putRecord({
+				return kinesis.send(new PutRecordCommand({
 					Data: info || 'abcd',
 					PartitionKey: 'key1',
 					StreamName: streamName
-				}).promise();
+				}));
 			};
 		beforeEach(() => {
 			createConfig = { name: testRunName, region: awsRegion, source: workingdir, handler: 'main.handler' };
@@ -118,23 +119,23 @@ describe('addKinesisEventSource', () => {
 		it('sets up privileges if role is given with name', done => {
 			createLambda()
 			.then(() => underTest(config))
-			.then(() => lambda.listEventSourceMappings({FunctionName: testRunName}).promise())
+			.then(() => lambda.send(new ListEventSourceMappingsCommand({FunctionName: testRunName})))
 			.then(config => {
 				expect(config.EventSourceMappings.length).toBe(1);
 				expect(config.EventSourceMappings[0].FunctionArn).toMatch(new RegExp(testRunName + '$'));
 				expect(config.EventSourceMappings[0].EventSourceArn).toEqual(streamDescription.StreamARN);
 			})
-			.then(done, done.fail);
+			.then(() => done(), done.fail);
 		});
 		it('sets up stream using an ARN', done => {
 			config.stream = streamDescription.StreamARN;
 			createLambda()
 			.then(() => underTest(config))
-			.then(() => lambda.listEventSourceMappings({FunctionName: testRunName}).promise())
+			.then(() => lambda.send(new ListEventSourceMappingsCommand({FunctionName: testRunName})))
 			.then(config => {
 				expect(config.EventSourceMappings[0].EventSourceArn).toEqual(streamDescription.StreamARN);
 			})
-			.then(done, done.fail);
+			.then(() => done(), done.fail);
 		});
 		it('invokes lambda from Kinesis when no version is given', done => {
 			createLambda()
@@ -143,8 +144,7 @@ describe('addKinesisEventSource', () => {
 			.then(() => {
 				return retry(() => {
 					console.log(`trying to get events from /aws/lambda/${testRunName}`);
-					return logs.filterLogEvents({ logGroupName: '/aws/lambda/' + testRunName, filterPattern: 'kinesis' })
-						.promise()
+					return logs.send(new FilterLogEventsCommand({ logGroupName: '/aws/lambda/' + testRunName, filterPattern: 'kinesis' }))
 						.then(logEvents => {
 							if (logEvents.events.length) {
 								return logEvents.events;
@@ -154,7 +154,7 @@ describe('addKinesisEventSource', () => {
 						});
 				}, 30000, 10, undefined, undefined, Promise);
 			})
-			.then(done, done.fail);
+			.then(() => done(), done.fail);
 		});
 		it('binds to an alias, if the version is provided', done => {
 			createConfig.version = 'special';
@@ -162,24 +162,24 @@ describe('addKinesisEventSource', () => {
 
 			createLambda()
 			.then(() => underTest(config))
-			.then(() => lambda.listEventSourceMappings({FunctionName: `${testRunName}:special`}).promise())
+			.then(() => lambda.send(new ListEventSourceMappingsCommand({FunctionName: `${testRunName}:special`})))
 			.then(config => {
 				expect(config.EventSourceMappings.length).toBe(1);
 				expect(config.EventSourceMappings[0].FunctionArn).toMatch(new RegExp(testRunName + ':special$'));
 				expect(config.EventSourceMappings[0].EventSourceArn).toEqual(streamDescription.StreamARN);
 			})
-			.then(done, done.fail);
+			.then(() => done(), done.fail);
 		});
 		it('sets up batch size', done => {
 			config['batch-size'] = 50;
 			createLambda()
 			.then(() => underTest(config))
-			.then(() => lambda.listEventSourceMappings({FunctionName: testRunName}).promise())
+			.then(() => lambda.send(new ListEventSourceMappingsCommand({FunctionName: testRunName})))
 			.then(config => {
 				expect(config.EventSourceMappings.length).toBe(1);
 				expect(config.EventSourceMappings[0].BatchSize).toEqual(50);
 			})
-			.then(done, done.fail);
+			.then(() => done(), done.fail);
 		});
 
 		it('invokes lambda from Kinesis when version is provided', done => {
@@ -191,8 +191,7 @@ describe('addKinesisEventSource', () => {
 			.then(() => {
 				return retry(() => {
 					console.log(`trying to get events from /aws/lambda/${testRunName}`);
-					return logs.filterLogEvents({ logGroupName: '/aws/lambda/' + testRunName, filterPattern: 'kinesis' })
-						.promise()
+					return logs.send(new FilterLogEventsCommand({ logGroupName: '/aws/lambda/' + testRunName, filterPattern: 'kinesis' }))
 						.then(logEvents => {
 							if (logEvents.events.length) {
 								return logEvents.events;
@@ -202,7 +201,7 @@ describe('addKinesisEventSource', () => {
 						});
 				}, 30000, 10, undefined, undefined, Promise);
 			})
-			.then(done, done.fail);
+			.then(() => done(), done.fail);
 		});
 	});
 });

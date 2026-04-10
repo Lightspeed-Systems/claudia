@@ -1,8 +1,7 @@
-const aws = require('aws-sdk');
 module.exports = function listWrappableFunctions(object) {
 	'use strict';
 	const excluded = ['constructor'],
-		excludedPrototypes = [Array.prototype, Object.prototype, Function.prototype, aws.Service.prototype],
+		excludedPrototypes = [Array.prototype, Object.prototype, Function.prototype],
 		isFunction = function (key) {
 			return typeof object[key] === 'function';
 		},

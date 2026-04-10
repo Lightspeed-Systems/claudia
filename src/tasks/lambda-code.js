@@ -1,6 +1,7 @@
 const	path = require('path'),
 	fs = require('fs'),
 	fsPromise = require('../util/fs-promise'),
+	{ Upload } = require('@aws-sdk/lib-storage'),
 	readFromDisk = function (packageArchive) {
 		'use strict';
 		return fsPromise.readFileAsync(packageArchive)
@@ -18,7 +19,7 @@ const	path = require('path'),
 		if (serverSideEncryption) {
 			params.ServerSideEncryption = serverSideEncryption;
 		}
-		return s3.upload(params).promise()
+		return new Upload({ client: s3, params }).done()
 		.then(() => ({
 			S3Bucket: bucket,
 			S3Key: fileKey

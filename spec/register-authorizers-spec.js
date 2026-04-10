@@ -6,7 +6,10 @@ const underTest = require('../src/tasks/register-authorizers'),
 	fs = require('fs'),
 	tmppath = require('../src/util/tmppath'),
 	fsUtil = require('../src/util/fs-util'),
-	aws = require('aws-sdk'),
+	{ LambdaClient, GetFunctionConfigurationCommand, DeleteFunctionCommand, GetPolicyCommand } = require('@aws-sdk/client-lambda'),
+	{ APIGatewayClient } = require('@aws-sdk/client-api-gateway'),
+	apiGwCommands = require('@aws-sdk/client-api-gateway'),
+	{ IAMClient, GetRoleCommand } = require('@aws-sdk/client-iam'),
 	retriableWrap = require('../src/util/retriable-wrap'),
 	cognitoUserPool = require('./util/cognito-user-pool'),
 	awsRegion = require('./util/test-aws-region');
@@ -14,9 +17,9 @@ const underTest = require('../src/tasks/register-authorizers'),
 describe('registerAuthorizers', () => {
 	'use strict';
 	let authorizerLambdaName, workingdir, testRunName, newObjects, apiId, authorizerArn, ownerId, awsPartition;
-	const apiGateway = retriableWrap(new aws.APIGateway({ region: awsRegion })),
-		lambda = new aws.Lambda({ region: awsRegion }),
-		iam = new aws.IAM({ region: awsRegion }),
+	const apiGateway = retriableWrap(new APIGatewayClient({ region: awsRegion }), apiGwCommands),
+		lambda = new LambdaClient({ region: awsRegion }),
+		iam = new IAMClient({ region: awsRegion }),
 		checkAuthUri = function (uri) {
 			expect(uri).toMatch(/^arn:aws:apigateway:[a-z0-9-]+:lambda:path\/2015-03-31\/functions\/arn:aws:lambda:[a-z0-9-]+:[0-9]+:function:test[0-9]+auth\/invocations$/);
 			expect(uri.split(':')[11]).toEqual(testRunName + 'auth/invocations');
@@ -50,7 +53,7 @@ describe('registerAuthorizers', () => {
 		})
 		.then(result => {
 			authorizerLambdaName = result.lambda && result.lambda.name;
-			return lambda.getFunctionConfiguration({ FunctionName: authorizerLambdaName }).promise();
+			return lambda.send(new GetFunctionConfigurationCommand({ FunctionName: authorizerLambdaName }));
 		})
 		.then(lambdaConfig => {
 			authorizerArn = lambdaConfig.FunctionArn;
@@ -60,7 +63,7 @@ describe('registerAuthorizers', () => {
 			ownerId = components[4];
 			awsPartition = components[1];
 		})
-		.then(done, e => {
+		.then(() => done(), e => {
 			console.log('error setting up', e);
 			done.fail();
 		});
@@ -69,17 +72,17 @@ describe('registerAuthorizers', () => {
 		destroyObjects(newObjects)
 		.then(() => {
 			if (authorizerLambdaName) {
-				return lambda.deleteFunction({FunctionName: authorizerLambdaName}).promise();
+				return lambda.send(new DeleteFunctionCommand({FunctionName: authorizerLambdaName}));
 			}
 		})
-		.then(done, done.fail);
+		.then(() => done(), done.fail);
 	});
 	it('does nothing when authorizers are not defined', done => {
 		underTest(false, apiId, ownerId, awsPartition, awsRegion)
 		.then(createResult => expect(createResult).toEqual({}))
 		.then(() => apiGateway.getAuthorizersPromise({ restApiId: apiId }))
 		.then(authorizers => expect(authorizers.items).toEqual([]))
-		.then(done, done.fail);
+		.then(() => done(), done.fail);
 	});
 	it('creates header-based authorizers', done => {
 		const authorizerConfig = {
@@ -104,7 +107,7 @@ describe('registerAuthorizers', () => {
 			expect(authorizers.items[0].identitySource).toEqual('method.request.header.Authorization');
 			checkAuthUri(authorizers.items[0].authorizerUri);
 		})
-		.then(done, done.fail);
+		.then(() => done(), done.fail);
 	});
 	it('creates header-based authorizers with an identity source', done => {
 		const authorizerConfig = {
@@ -129,7 +132,7 @@ describe('registerAuthorizers', () => {
 			expect(authorizers.items[0].identitySource).toEqual('method.request.header.Auth2');
 			checkAuthUri(authorizers.items[0].authorizerUri);
 		})
-		.then(done, done.fail);
+		.then(() => done(), done.fail);
 	});
 	it('creates request-based authorizers with a header', done => {
 		const authorizerConfig = {
@@ -154,7 +157,7 @@ describe('registerAuthorizers', () => {
 			expect(authorizers.items[0].identitySource).toEqual('method.request.header.Authorization');
 			checkAuthUri(authorizers.items[0].authorizerUri);
 		})
-		.then(done, done.fail);
+		.then(() => done(), done.fail);
 	});
 
 	it('creates request-based authorizers with an identity source', done => {
@@ -180,7 +183,7 @@ describe('registerAuthorizers', () => {
 			expect(authorizers.items[0].identitySource).toEqual('method.request.header.Auth, method.request.querystring.Name');
 			checkAuthUri(authorizers.items[0].authorizerUri);
 		})
-		.then(done, done.fail);
+		.then(() => done(), done.fail);
 	});
 	it('assigns a token validation regex if supplied', done => {
 		const authorizerConfig = {
@@ -189,11 +192,11 @@ describe('registerAuthorizers', () => {
 		underTest(authorizerConfig, apiId, ownerId, awsPartition, awsRegion)
 		.then(() => apiGateway.getAuthorizersPromise({ restApiId: apiId }))
 		.then(authorizers => expect(authorizers.items[0].identityValidationExpression).toEqual('A-Z'))
-		.then(done, done.fail);
+		.then(() => done(), done.fail);
 	});
 	it('assigns authorizer credentials if supplied', done => {
 		let roleArn;
-		iam.getRole({ RoleName: genericTestRole.get() }).promise()
+		iam.send(new GetRoleCommand({ RoleName: genericTestRole.get() }))
 		.then(roleDetails => {
 			roleArn = roleDetails.Role.Arn;
 			expect(roleArn).toBeTruthy();
@@ -206,7 +209,7 @@ describe('registerAuthorizers', () => {
 		})
 		.then(() => apiGateway.getAuthorizersPromise({ restApiId: apiId }))
 		.then(authorizers => expect(authorizers.items[0].authorizerCredentials).toEqual(roleArn))
-		.then(done, done.fail);
+		.then(() => done(), done.fail);
 	});
 	it('assigns authorizer ttl in seconds if supplied', done => {
 		const authorizerConfig = {
@@ -224,7 +227,7 @@ describe('registerAuthorizers', () => {
 			expect(authorizers.items[0].authorizerResultTtlInSeconds).toEqual(5);
 			checkAuthUri(authorizers.items[0].authorizerUri);
 		})
-		.then(done, done.fail);
+		.then(() => done(), done.fail);
 	});
 	it('assigns authorizer ttl undefined if value not supplied', done => {
 		const authorizerConfig = {
@@ -242,7 +245,7 @@ describe('registerAuthorizers', () => {
 			expect(authorizers.items[0].authorizerResultTtlInSeconds).toEqual(undefined);
 			checkAuthUri(authorizers.items[0].authorizerUri);
 		})
-		.then(done, done.fail);
+		.then(() => done(), done.fail);
 	});
 	it('assigns authorizer ttl in 0 seconds if 0 supplied as a value', done => {
 		const authorizerConfig = {
@@ -260,7 +263,7 @@ describe('registerAuthorizers', () => {
 			expect(authorizers.items[0].authorizerResultTtlInSeconds).toEqual(0);
 			checkAuthUri(authorizers.items[0].authorizerUri);
 		})
-		.then(done, done.fail);
+		.then(() => done(), done.fail);
 	});
 	it('uses the Authorization header by default', done => {
 		const authorizerConfig = {
@@ -280,7 +283,7 @@ describe('registerAuthorizers', () => {
 			expect(authorizers.items[0].identitySource).toEqual('method.request.header.Authorization');
 			checkAuthUri(authorizers.items[0].authorizerUri);
 		})
-		.then(done, done.fail);
+		.then(() => done(), done.fail);
 	});
 	it('creates multiple authorizers', done => {
 		const authorizerConfig = {
@@ -309,7 +312,7 @@ describe('registerAuthorizers', () => {
 			expect(auths.second.identitySource).toEqual('method.request.header.UserId');
 			checkAuthUri(auths.second.authorizerUri);
 		})
-		.then(done, done.fail);
+		.then(() => done(), done.fail);
 	});
 	it('overrides existing authorizers', done => {
 		let result;
@@ -354,7 +357,7 @@ describe('registerAuthorizers', () => {
 			expect(auths.third.identitySource).toEqual('method.request.header.NewThird');
 			checkAuthUri(auths.third.authorizerUri);
 		})
-		.then(done, done.fail);
+		.then(() => done(), done.fail);
 	});
 	it('creates authorizers using an ARN', done => {
 		const authorizerConfig = {
@@ -374,7 +377,7 @@ describe('registerAuthorizers', () => {
 			expect(authorizers.items[0].identitySource).toEqual('method.request.header.Authorization');
 			checkAuthUri(authorizers.items[0].authorizerUri);
 		})
-		.then(done, done.fail);
+		.then(() => done(), done.fail);
 	});
 	it('creates authorizers qualified by lambda name and current stage', done => {
 		const authorizerConfig = {
@@ -394,14 +397,14 @@ describe('registerAuthorizers', () => {
 			expect(authorizers.items[0].identitySource).toEqual('method.request.header.Authorization');
 			checkAuthUriWithVersion(authorizers.items[0].authorizerUri, '${stageVariables.lambdaVersion}');
 		})
-		.then(done, done.fail);
+		.then(() => done(), done.fail);
 	});
 	describe('creates cognito authorizers', () => {
 		beforeEach(done => {
-			cognitoUserPool.create().then(done, done.fail);
+			cognitoUserPool.create().then(() => done(), done.fail);
 		});
 		afterEach(done => {
-			cognitoUserPool.destroy().then(done, done.fail);
+			cognitoUserPool.destroy().then(() => done(), done.fail);
 		});
 		it('configures an authorizer using providerArns', done => {
 			const authorizerConfig = {
@@ -427,7 +430,7 @@ describe('registerAuthorizers', () => {
 
 				});
 			})
-			.then(done, done.fail);
+			.then(() => done(), done.fail);
 		});
 
 
@@ -450,7 +453,7 @@ describe('registerAuthorizers', () => {
 			expect(authorizers.items[0].identitySource).toEqual('method.request.header.Authorization');
 			checkAuthUriWithVersion(authorizers.items[0].authorizerUri, 'original');
 		})
-		.then(done, done.fail);
+		.then(() => done(), done.fail);
 	});
 	it('allows api gateway to invoke the authorizer lambda without qualifier', done => {
 		const authorizerConfig = {
@@ -458,16 +461,16 @@ describe('registerAuthorizers', () => {
 		};
 		underTest(authorizerConfig, apiId, ownerId, awsPartition, awsRegion)
 		.then(() => {
-			return lambda.getPolicy({
+			return lambda.send(new GetPolicyCommand({
 				FunctionName: authorizerLambdaName
-			}).promise();
+			}));
 		})
 		.then(policyResponse => policyResponse && policyResponse.Policy && JSON.parse(policyResponse.Policy))
 		.then(currentPolicy => {
 			expect(currentPolicy.Statement[0].Condition.ArnLike['AWS:SourceArn']).toMatch(`arn:aws:execute-api:${awsRegion}:${ownerId}:${apiId}/authorizers/*`);
 			expect(currentPolicy.Statement[0].Effect).toEqual('Allow');
 		})
-		.then(done, done.fail);
+		.then(() => done(), done.fail);
 	});
 	it('allows api gateway to invoke the authorizer lambda with a hard-coded qualifier', done => {
 		const authorizerConfig = {
@@ -475,17 +478,17 @@ describe('registerAuthorizers', () => {
 		};
 		underTest(authorizerConfig, apiId, ownerId, awsPartition, awsRegion, 'development')
 		.then(() => {
-			return lambda.getPolicy({
+			return lambda.send(new GetPolicyCommand({
 				FunctionName: authorizerLambdaName,
 				Qualifier: 'original'
-			}).promise();
+			}));
 		})
 		.then(policyResponse => policyResponse && policyResponse.Policy && JSON.parse(policyResponse.Policy))
 		.then(currentPolicy => {
 			expect(currentPolicy.Statement[0].Condition.ArnLike['AWS:SourceArn']).toMatch('arn:aws:execute-api:' + awsRegion + ':' + ownerId + ':' + apiId + '/authorizers/*');
 			expect(currentPolicy.Statement[0].Effect).toEqual('Allow');
 		})
-		.then(done, done.fail);
+		.then(() => done(), done.fail);
 	});
 	it('allows api gateway to invoke the authorizer lambda with a current version qualifier', done => {
 		const authorizerConfig = {
@@ -493,17 +496,17 @@ describe('registerAuthorizers', () => {
 		};
 		underTest(authorizerConfig, apiId, ownerId, awsPartition, awsRegion, 'original')
 		.then(() => {
-			return lambda.getPolicy({
+			return lambda.send(new GetPolicyCommand({
 				FunctionName: authorizerLambdaName,
 				Qualifier: 'original'
-			}).promise();
+			}));
 		})
 		.then(policyResponse => policyResponse && policyResponse.Policy && JSON.parse(policyResponse.Policy))
 		.then(currentPolicy => {
 			expect(currentPolicy.Statement[0].Condition.ArnLike['AWS:SourceArn']).toMatch('arn:aws:execute-api:' + awsRegion + ':' + ownerId + ':' + apiId + '/authorizers/*');
 			expect(currentPolicy.Statement[0].Effect).toEqual('Allow');
 		})
-		.then(done, done.fail);
+		.then(() => done(), done.fail);
 	});
 	it('does not assign policies when the authorizer is specified with an ARN', done => {
 		const authorizerConfig = {
@@ -511,11 +514,11 @@ describe('registerAuthorizers', () => {
 		};
 		underTest(authorizerConfig, apiId, ownerId, awsPartition, awsRegion, 'original')
 		.then(() => {
-			return lambda.getPolicy({
+			return lambda.send(new GetPolicyCommand({
 				FunctionName: authorizerLambdaName
-			}).promise();
+			}));
 		})
 		.then(done.fail, err => expect(err.message).toEqual('The resource you requested does not exist.'))
-		.then(done);
+		.then(() => done());
 	});
 });

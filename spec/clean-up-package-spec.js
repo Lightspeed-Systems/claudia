@@ -29,7 +29,7 @@ describe('cleanUpPackage', () => {
 			}
 		});
 		runNpm(sourcedir, ['install', '--silent'], logger, true)
-		.then(done, done.fail);
+		.then(() => done(), done.fail);
 	});
 	afterEach(() => {
 		process.chdir(pwd);
@@ -42,7 +42,7 @@ describe('cleanUpPackage', () => {
 		.then(result => {
 			expect(result).toEqual(sourcedir);
 		})
-		.then(done, done.fail);
+		.then(() => done(), done.fail);
 	});
 	it('does not clean up optional dependencies if not requested', done => {
 		underTest(sourcedir, {}, logger)
@@ -51,7 +51,7 @@ describe('cleanUpPackage', () => {
 			expect(fsUtil.isDir(path.join(sourcedir, 'node_modules', 'uuid'))).toBeTruthy();
 			expect(fsUtil.isDir(path.join(sourcedir, 'node_modules', 'minimist'))).toBeTruthy();
 		})
-		.then(done, done.fail);
+		.then(() => done(), done.fail);
 	});
 	it('cleans up optional dependencies if requested', done => {
 		underTest(sourcedir, { 'optional-dependencies': false }, logger)
@@ -60,7 +60,7 @@ describe('cleanUpPackage', () => {
 			expect(fsUtil.isDir(path.join(sourcedir, 'node_modules', 'uuid'))).toBeTruthy();
 			expect(fsUtil.isDir(path.join(sourcedir, 'node_modules', 'minimist'))).toBeFalsy();
 		})
-		.then(done, done.fail);
+		.then(() => done(), done.fail);
 	});
 	it('passes additional options to NPM if requested', done => {
 		underTest(sourcedir, { 'optional-dependencies': false, 'npm-options': '--dry-run' }, logger)
@@ -69,7 +69,7 @@ describe('cleanUpPackage', () => {
 			expect(fsUtil.isDir(path.join(sourcedir, 'node_modules', 'uuid'))).toBeFalsy();
 			expect(fsUtil.isDir(path.join(sourcedir, 'node_modules', 'minimist'))).toBeFalsy();
 		})
-		.then(done, done.fail);
+		.then(() => done(), done.fail);
 	});
 
 	it('removes .npmrc if exists', done => {
@@ -79,7 +79,7 @@ describe('cleanUpPackage', () => {
 			expect(result).toEqual(sourcedir);
 			expect(fsUtil.isFile(path.join(sourcedir, '.npmrc'))).toBeFalsy();
 		})
-		.then(done, done.fail);
+		.then(() => done(), done.fail);
 	});
 	it('removes package-lock.json if exists', done => {
 		fs.writeFileSync(path.join(sourcedir, 'package-lock.json'), '{}', 'utf8');
@@ -88,7 +88,7 @@ describe('cleanUpPackage', () => {
 			expect(result).toEqual(sourcedir);
 			expect(fsUtil.isFile(path.join(sourcedir, 'package-lock.json'))).toBeFalsy();
 		})
-		.then(done, done.fail);
+		.then(() => done(), done.fail);
 	});
 	it('fails if npm install fails', done => {
 		configurePackage({
@@ -113,7 +113,7 @@ describe('cleanUpPackage', () => {
 				['call', 'npm dedupe -q --no-package-lock --production --no-optional --dry-run']
 			]);
 		})
-		.then(done, done.fail);
+		.then(() => done(), done.fail);
 	});
 	it('only dedupes if optional deps are not turned off', done => {
 		const logger = new ArrayLogger();
@@ -123,7 +123,7 @@ describe('cleanUpPackage', () => {
 				['call', 'npm dedupe -q --no-package-lock']
 			]);
 		})
-		.then(done, done.fail);
+		.then(() => done(), done.fail);
 	});
 	it('executes a post-package script if requested', done => {
 		const logger = new ArrayLogger();
@@ -141,7 +141,7 @@ describe('cleanUpPackage', () => {
 				['call', 'npm run customPack']
 			]);
 		})
-		.then(done, done.fail);
+		.then(() => done(), done.fail);
 	});
 	it('fixes file permissions for non-world readable files in the directory', done => {
 		fs.writeFileSync(path.join(sourcedir, 'owner-readable.txt'), 'owner', 'utf8');
@@ -162,7 +162,7 @@ describe('cleanUpPackage', () => {
 			expect(fs.statSync(path.join(sourcedir, 'subdir')).mode & 0o777).toEqual(0o755);
 			expect(fs.statSync(path.join(sourcedir, 'subdir', 'user-exec.txt')).mode & 0o777).toEqual(0o745);
 		})
-		.then(done, done.fail);
+		.then(() => done(), done.fail);
 
 	});
 });

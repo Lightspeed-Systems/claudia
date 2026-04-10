@@ -1,5 +1,11 @@
 # Release history
 
+### 6.0.0
+
+- Migrated from AWS SDK v2 to AWS SDK v3
+- Minimum Node.js version raised to >=20.0.0
+- See [releases/6.0.0.md](releases/6.0.0.md) for breaking changes and migration details
+
 ### 5.14.1 (17 March 2022)
 
 - additional fixes for the lambda lifecycle updates, thanks to [Mangwan](https://github.com/CodeBanBan)

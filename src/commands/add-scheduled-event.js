@@ -1,6 +1,8 @@
 const loadConfig = require('../util/loadconfig'),
 	fsPromise = require('../util/fs-promise'),
-	aws = require('aws-sdk');
+	{ LambdaClient, GetFunctionConfigurationCommand, AddPermissionCommand } = require('@aws-sdk/client-lambda'),
+	{ CloudWatchEventsClient, PutRuleCommand, PutTargetsCommand } = require('@aws-sdk/client-cloudwatch-events'),
+	awsClientConfig = require('../util/aws-client-config');
 
 module.exports = function addScheduledEvent(options) {
 	'use strict';
@@ -10,10 +12,10 @@ module.exports = function addScheduledEvent(options) {
 		eventData,
 		ruleArn;
 	const initServices = function () {
-			lambda = new aws.Lambda({region: lambdaConfig.region});
-			events = new aws.CloudWatchEvents({region: lambdaConfig.region});
+			lambda = new LambdaClient(awsClientConfig(lambdaConfig.region, options));
+			events = new CloudWatchEventsClient(awsClientConfig(lambdaConfig.region, options));
 		},
-		getLambda = () => lambda.getFunctionConfiguration({FunctionName: lambdaConfig.name, Qualifier: options.version}).promise(),
+		getLambda = () => lambda.send(new GetFunctionConfigurationCommand({FunctionName: lambdaConfig.name, Qualifier: options.version})),
 		readConfig = function () {
 			return loadConfig(options, {lambda: {name: true, region: true}})
 				.then(config => {
@@ -27,23 +29,23 @@ module.exports = function addScheduledEvent(options) {
 				});
 		},
 		addInvokePermission = function () {
-			return lambda.addPermission({
+			return lambda.send(new AddPermissionCommand({
 				Action: 'lambda:InvokeFunction',
 				FunctionName: lambdaConfig.name,
 				Principal: 'events.amazonaws.com',
 				SourceArn: ruleArn,
 				Qualifier: options.version,
 				StatementId: `${options.name}-access-${Date.now()}`
-			}).promise();
+			}));
 		},
 		createRule = function () {
-			return events.putRule({
+			return events.send(new PutRuleCommand({
 				Name: options.name,
 				ScheduleExpression: options.schedule
-			}).promise();
+			}));
 		},
 		addRuleTarget = function () {
-			return events.putTargets({
+			return events.send(new PutTargetsCommand({
 				Rule: options.name,
 				Targets: [
 					{
@@ -52,7 +54,7 @@ module.exports = function addScheduledEvent(options) {
 						Input: eventData
 					}
 				]
-			}).promise();
+			}));
 		};
 	if (options.rate) {
 		options.schedule = `rate(${options.rate})`;

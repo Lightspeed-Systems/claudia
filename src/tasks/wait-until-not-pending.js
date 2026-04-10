@@ -1,14 +1,15 @@
-const retry = require('oh-no-i-insist');
+const retry = require('oh-no-i-insist'),
+	{ GetFunctionConfigurationCommand } = require('@aws-sdk/client-lambda');
 module.exports = function waitUntilNotPending(lambda, functionName, timeout, retries) {
 	'use strict';
 	return retry(
 		() => {
-			return lambda.getFunctionConfiguration({FunctionName: functionName}).promise()
+			return lambda.send(new GetFunctionConfigurationCommand({FunctionName: functionName}))
 				.then(result => {
-					if (result.state === 'Failed') {
+					if (result.State === 'Failed') {
 						throw `Lambda resource update failed`;
 					}
-					if (result.state === 'Pending') {
+					if (result.State === 'Pending') {
 						throw 'Pending';
 					}
 					if (result.LastUpdateStatus === 'InProgress') {

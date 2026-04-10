@@ -13,7 +13,7 @@ describe('extractTar', () => {
 		.then(dir => {
 			workingdir = path.resolve(dir);
 		})
-		.then(done, done.fail);
+		.then(() => done(), done.fail);
 	});
 	afterEach(() => {
 		fsUtil.rmDir(workingdir);
@@ -24,7 +24,7 @@ describe('extractTar', () => {
 			expect(fs.readFileSync(path.join(workingdir, 'root.txt'), 'utf8')).toEqual('root\n');
 			expect(fs.readFileSync(path.join(workingdir, 'subdir', 'sub.txt'), 'utf8')).toEqual('sub\n');
 		})
-		.then(done, done.fail);
+		.then(() => done(), done.fail);
 	});
 });
 

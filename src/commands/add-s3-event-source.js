@@ -1,6 +1,9 @@
 const loadConfig = require('../util/loadconfig'),
 	iamNameSanitize = require('../util/iam-name-sanitize'),
-	aws = require('aws-sdk');
+	{ LambdaClient, GetFunctionConfigurationCommand, AddPermissionCommand } = require('@aws-sdk/client-lambda'),
+	{ IAMClient, PutRolePolicyCommand } = require('@aws-sdk/client-iam'),
+	{ S3Client, GetBucketNotificationConfigurationCommand, PutBucketNotificationConfigurationCommand } = require('@aws-sdk/client-s3'),
+	awsClientConfig = require('../util/aws-client-config');
 module.exports = function addS3EventSource(options) {
 	'use strict';
 	let lambdaConfig,
@@ -8,9 +11,9 @@ module.exports = function addS3EventSource(options) {
 		lambda;
 	const ts = Date.now(),
 		getLambda = function (config) {
-			lambda = new aws.Lambda({region: config.lambda.region});
+			lambda = new LambdaClient(awsClientConfig(config.lambda.region, options));
 			lambdaConfig = config.lambda;
-			return lambda.getFunctionConfiguration({FunctionName: lambdaConfig.name, Qualifier: options.version}).promise();
+			return lambda.send(new GetFunctionConfigurationCommand({FunctionName: lambdaConfig.name, Qualifier: options.version}));
 		},
 		readConfig = function () {
 			return loadConfig(options, {lambda: {name: true, region: true, role: true}})
@@ -26,8 +29,8 @@ module.exports = function addS3EventSource(options) {
 				});
 		},
 		addS3AccessPolicy = function () {
-			const iam = new aws.IAM({region: lambdaConfig.region});
-			return iam.putRolePolicy({
+			const iam = new IAMClient(awsClientConfig(lambdaConfig.region, options));
+			return iam.send(new PutRolePolicyCommand({
 				RoleName: lambdaConfig.role,
 				PolicyName: iamNameSanitize(`s3-${options.bucket}-access-${ts}`),
 				PolicyDocument: JSON.stringify({
@@ -44,21 +47,21 @@ module.exports = function addS3EventSource(options) {
 						}
 					]
 				})
-			}).promise();
+			}));
 		},
 		addInvokePermission = function () {
-			return lambda.addPermission({
+			return lambda.send(new AddPermissionCommand({
 				Action: 'lambda:InvokeFunction',
 				FunctionName: lambdaConfig.name,
 				Principal: 's3.amazonaws.com',
 				SourceArn: `arn:${awsPartition}:s3:::${options.bucket}`,
 				Qualifier: options.version,
 				StatementId: iamNameSanitize(`${options.bucket}-access-${ts}`)
-			}).promise();
+			}));
 		},
 		addBucketNotificationConfig = function () {
 			const events = options.events ? options.events.split(',') : ['s3:ObjectCreated:*'],
-				s3 = new aws.S3({region: lambdaConfig.region, signatureVersion: 'v4'}),
+				s3 = new S3Client(awsClientConfig(lambdaConfig.region, options)),
 				eventConfig = {
 					LambdaFunctionArn: lambdaConfig.arn,
 					Events: events
@@ -83,19 +86,19 @@ module.exports = function addS3EventSource(options) {
 					}
 				};
 			}
-			return s3.getBucketNotificationConfiguration({
+			return s3.send(new GetBucketNotificationConfigurationCommand({
 				Bucket: options.bucket
-			}).promise()
+			}))
 			.then(currentConfig => {
 				const merged = currentConfig || {};
 				if (!merged.LambdaFunctionConfigurations) {
 					merged.LambdaFunctionConfigurations = [];
 				}
 				merged.LambdaFunctionConfigurations.push(eventConfig);
-				return s3.putBucketNotificationConfiguration({
+				return s3.send(new PutBucketNotificationConfigurationCommand({
 					Bucket: options.bucket,
 					NotificationConfiguration: merged
-				}).promise();
+				}));
 			});
 		};
 

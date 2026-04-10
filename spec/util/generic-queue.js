@@ -1,8 +1,8 @@
 
 let queueUrl;
-const aws = require('aws-sdk'),
+const { SQSClient, CreateQueueCommand, ReceiveMessageCommand, DeleteMessageCommand, DeleteQueueCommand } = require('@aws-sdk/client-sqs'),
 	awsRegion = require('./test-aws-region'),
-	sqs = new aws.SQS({region: awsRegion}),
+	sqs = new SQSClient({region: awsRegion}),
 	retry = require('oh-no-i-insist'),
 	genericQueueName = 'test-queue-' + Date.now(),
 	getQueueUrl = function () {
@@ -10,9 +10,9 @@ const aws = require('aws-sdk'),
 		if (queueUrl) {
 			return Promise.resolve(queueUrl);
 		} else {
-			return sqs.createQueue({
+			return sqs.send(new CreateQueueCommand({
 				QueueName: genericQueueName
-			}).promise()
+			}))
 			.then(result => {
 				queueUrl = result.QueueUrl;
 				return queueUrl;
@@ -27,18 +27,18 @@ module.exports.waitForMessage = function (contents) {
 	return getQueueUrl()
 		.then(queueUrl => {
 			return retry(() => {
-				return sqs.receiveMessage({
+				return sqs.send(new ReceiveMessageCommand({
 					QueueUrl: queueUrl,
 					MaxNumberOfMessages: 1,
 					WaitTimeSeconds: 5
-				}).promise().then(response => {
+				})).then(response => {
 					const match = response && response.Messages &&
 						response.Messages.find(message => message.Body.indexOf(contents) > -1);
 					if (match) {
-						return sqs.deleteMessage({
+						return sqs.send(new DeleteMessageCommand({
 							QueueUrl: queueUrl,
 							ReceiptHandle: match.ReceiptHandle
-						}).promise()
+						}))
 						.then(() => Promise.resolve(match));
 					}
 					return Promise.reject('message not received');
@@ -52,6 +52,6 @@ module.exports.destroy = function () {
 	if (!queueUrl) {
 		return Promise.resolve();
 	} else {
-		return sqs.deleteQueue({QueueUrl: queueUrl}).promise();
+		return sqs.send(new DeleteQueueCommand({QueueUrl: queueUrl}));
 	}
 };

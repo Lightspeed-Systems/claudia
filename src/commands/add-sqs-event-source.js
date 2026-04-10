@@ -2,7 +2,10 @@ const loadConfig = require('../util/loadconfig'),
 	isSQSArn = require('../util/is-sqs-arn'),
 	iamNameSanitize = require('../util/iam-name-sanitize'),
 	retry = require('oh-no-i-insist'),
-	aws = require('aws-sdk');
+	{ LambdaClient, GetFunctionConfigurationCommand, CreateEventSourceMappingCommand } = require('@aws-sdk/client-lambda'),
+	{ IAMClient, PutRolePolicyCommand } = require('@aws-sdk/client-iam'),
+	{ SQSClient, GetQueueUrlCommand, GetQueueAttributesCommand } = require('@aws-sdk/client-sqs'),
+	awsClientConfig = require('../util/aws-client-config');
 
 module.exports = function addSQSEventSource(options, logger) {
 	'use strict';
@@ -13,11 +16,11 @@ module.exports = function addSQSEventSource(options, logger) {
 	const awsDelay = Number(options['aws-delay']) || 5000,
 		awsRetries = Number(options['aws-retries']) || 15,
 		initServices = function () {
-			lambda = new aws.Lambda({region: lambdaConfig.region});
-			iam = new aws.IAM({region: lambdaConfig.region});
-			sqs = new aws.SQS({region: lambdaConfig.region});
+			lambda = new LambdaClient(awsClientConfig(lambdaConfig.region, options));
+			iam = new IAMClient(awsClientConfig(lambdaConfig.region, options));
+			sqs = new SQSClient(awsClientConfig(lambdaConfig.region, options));
 		},
-		getLambda = () => lambda.getFunctionConfiguration({FunctionName: lambdaConfig.name, Qualifier: options.version}).promise(),
+		getLambda = () => lambda.send(new GetFunctionConfigurationCommand({FunctionName: lambdaConfig.name, Qualifier: options.version})),
 		readConfig = function () {
 			return loadConfig(options, {lambda: {name: true, region: true}})
 				.then(config => {
@@ -47,24 +50,24 @@ module.exports = function addSQSEventSource(options, logger) {
 					]
 				},
 				ts = Date.now();
-			return iam.putRolePolicy({
+			return iam.send(new PutRolePolicyCommand({
 				RoleName: lambdaConfig.role,
 				PolicyName: iamNameSanitize(`sqs-access-${ts}`),
 				PolicyDocument: JSON.stringify(policy)
-			}).promise()
+			}))
 			.then(() => queueArn);
 		},
 		getSQSArn = function () {
 			if (isSQSArn(options.queue)) {
 				return options.queue;
 			} else {
-				return sqs.getQueueUrl({
+				return sqs.send(new GetQueueUrlCommand({
 					QueueName: options.queue
-				}).promise()
-				.then(result => sqs.getQueueAttributes({
+				}))
+				.then(result => sqs.send(new GetQueueAttributesCommand({
 					QueueUrl: result.QueueUrl,
 					AttributeNames: ['QueueArn']
-				}).promise())
+				})))
 				.then(result => result.Attributes.QueueArn);
 			}
 		},
@@ -74,14 +77,14 @@ module.exports = function addSQSEventSource(options, logger) {
 				EventSourceArn: sqsArn,
 				BatchSize: options['batch-size']
 			};
-			return lambda.createEventSourceMapping(params).promise();
+			return lambda.send(new CreateEventSourceMappingCommand(params));
 		},
 		retriableAddEventSource = function (sqsArn) {
 			return retry(
 				() => addEventSource(sqsArn),
 				awsDelay,
 				awsRetries,
-				failure => failure.code === 'InvalidParameterValueException',
+				failure => failure.name === 'InvalidParameterValueException',
 				() => {
 					if (logger) {
 						logger.logStage('waiting for IAM role propagation');

@@ -1,26 +1,34 @@
 const Jasmine = require('jasmine'),
-	SpecReporter = require('jasmine-spec-reporter'),
+	{ SpecReporter } = require('jasmine-spec-reporter'),
 	jrunner = new Jasmine(),
 	runJasmine = function () {
 		'use strict';
 		let filter;
 		process.argv.slice(2).forEach(option => {
 			if (option === 'full') {
-				jasmine.getEnv().clearReporters();
-				jasmine.getEnv().addReporter(new SpecReporter({
-					displayStacktrace: 'all'
+				jrunner.env.clearReporters();
+				jrunner.env.addReporter(new SpecReporter({
+					spec: {
+						displayStacktrace: 'raw'
+					}
 				}));
 			}
 			if (option === 'ci') {
-				jasmine.getEnv().clearReporters();
-				jasmine.getEnv().addReporter(new SpecReporter({
-					displayStacktrace: 'all',
-					displaySpecDuration: true,
-					displaySuiteNumber: true,
-					colors: false,
+				jrunner.env.clearReporters();
+				jrunner.env.addReporter(new SpecReporter({
+					spec: {
+						displayStacktrace: 'raw',
+						displayDuration: true
+					},
+					suite: {
+						displayNumber: true
+					},
+					colors: {
+						enabled: false
+					},
 					prefixes: {
-						success: '[pass] ',
-						failure: '[fail] ',
+						successful: '[pass] ',
+						failed: '[fail] ',
 						pending: '[skip] '
 					}
 				}));

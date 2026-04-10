@@ -11,7 +11,7 @@ describe('fsUtil', () => {
 	});
 	afterEach(done => {
 		fsExtra.remove(pathName)
-		.then(done);
+		.then(() => done());
 	});
 	describe('rmDir', () => {
 		it('silently ignores empty directories', () => {

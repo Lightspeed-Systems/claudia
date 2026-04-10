@@ -9,7 +9,14 @@ const underTest = require('../src/commands/create'),
 	retriableWrap = require('../src/util/retriable-wrap'),
 	path = require('path'),
 	os = require('os'),
-	aws = require('aws-sdk'),
+	{ IAMClient, GetRoleCommand, CreateRoleCommand, ListRolePoliciesCommand, GetRolePolicyCommand, PutRolePolicyCommand } = require('@aws-sdk/client-iam'),
+	{ LambdaClient, GetFunctionConfigurationCommand, InvokeCommand, ListVersionsByFunctionCommand, GetAliasCommand, PublishLayerVersionCommand, DeleteLayerVersionCommand } = require('@aws-sdk/client-lambda'),
+	{ S3Client, CreateBucketCommand, HeadObjectCommand, PutBucketEncryptionCommand, PutBucketPolicyCommand } = require('@aws-sdk/client-s3'),
+	{ CloudWatchLogsClient, CreateLogGroupCommand, CreateLogStreamCommand } = require('@aws-sdk/client-cloudwatch-logs'),
+	{ SNSClient, CreateTopicCommand } = require('@aws-sdk/client-sns'),
+	{ EC2Client, CreateVpcCommand, CreateSubnetCommand, CreateSecurityGroupCommand, DeleteSubnetCommand, DeleteSecurityGroupCommand, DeleteVpcCommand } = require('@aws-sdk/client-ec2'),
+	{ APIGatewayClient } = require('@aws-sdk/client-api-gateway'),
+	apiGwCommands = require('@aws-sdk/client-api-gateway'),
 	pollForLogEvents = require('./util/poll-for-log-events'),
 	awsRegion = require('./util/test-aws-region'),
 	executorPolicy = require('../src/policies/lambda-executor-policy'),
@@ -46,15 +53,15 @@ describe('create', () => {
 			});
 		},
 		getLambdaConfiguration = function () {
-			return lambda.getFunctionConfiguration({ FunctionName: testRunName }).promise();
+			return lambda.send(new GetFunctionConfigurationCommand({ FunctionName: testRunName }));
 		};
 	beforeAll(() => {
-		iam = new aws.IAM({ region: awsRegion });
-		lambda = new aws.Lambda({ region: awsRegion });
-		s3 = new aws.S3({region: awsRegion, signatureVersion: 'v4'});
-		apiGatewayPromise = retriableWrap(new aws.APIGateway({ region: awsRegion }));
-		logs = new aws.CloudWatchLogs({ region: awsRegion });
-		sns = new aws.SNS({region: awsRegion});
+		iam = new IAMClient({ region: awsRegion });
+		lambda = new LambdaClient({ region: awsRegion });
+		s3 = new S3Client({region: awsRegion});
+		apiGatewayPromise = retriableWrap(new APIGatewayClient({ region: awsRegion }), apiGwCommands);
+		logs = new CloudWatchLogsClient({ region: awsRegion });
+		sns = new SNSClient({region: awsRegion});
 	});
 	beforeEach(() => {
 		workingdir = tmppath();
@@ -63,14 +70,14 @@ describe('create', () => {
 		config = { name: testRunName, region: awsRegion, source: workingdir, handler: 'main.handler' };
 	});
 	afterEach(done => {
-		destroyObjects(newObjects).then(done, done.fail);
+		destroyObjects(newObjects).then(() => done(), done.fail);
 	});
 	describe('config validation', () => {
 		it('fails if the source folder is same as os tmp folder', done => {
 			config.source = os.tmpdir();
 			underTest(config)
 			.then(done.fail, message => expect(message).toEqual('Source directory is the Node temp directory. Cowardly refusing to fill up disk with recursive copy.'))
-			.then(done);
+			.then(() => done());
 		});
 		it('fails if name is not given either as an option or package.json name', done => {
 			fs.mkdirSync(workingdir);
@@ -79,32 +86,32 @@ describe('create', () => {
 			config.name = undefined;
 			underTest(config)
 			.then(done.fail, message => expect(message).toEqual('project name is missing. please specify with --name or in package.json'))
-			.then(done);
+			.then(() => done());
 		});
 		it('fails if the region is not given', done => {
 			config.region = undefined;
 			underTest(config)
 			.then(done.fail, message => expect(message).toEqual('AWS region is missing. please specify with --region'))
-			.then(done);
+			.then(() => done());
 		});
 		it('fails if the handler is not given', done => {
 			config.handler = undefined;
 			underTest(config)
 			.then(done.fail, message => expect(message).toEqual('Lambda handler is missing. please specify with --handler'))
-			.then(done);
+			.then(() => done());
 		});
 		it('fails if the handler does not contain a dot', done => {
 			config.handler = 'api';
 			createFromDir('hello-world')
 			.then(done.fail, message => expect(message).toEqual('Lambda handler function not specified. Please specify with --handler module.function'))
-			.then(done);
+			.then(() => done());
 		});
 		it('fails if both handler and api module are provided', done => {
 			config.handler = 'main.handler';
 			config['api-module'] = 'main';
 			createFromDir('hello-world')
 			.then(done.fail, message => expect(message).toEqual('incompatible arguments: cannot specify handler and api-module at the same time.'))
-			.then(done);
+			.then(() => done());
 		});
 		it('fails if deploy-proxy-api is specified but handler is not', done => {
 			config['deploy-proxy-api'] = true;
@@ -112,7 +119,7 @@ describe('create', () => {
 			config['api-module'] = 'abc';
 			createFromDir('hello-world')
 			.then(done.fail, message => expect(message).toEqual('deploy-proxy-api requires a handler. please specify with --handler'))
-			.then(done);
+			.then(() => done());
 		});
 		it('fails if binary-media-types is specified but deploy-proxy-api is not', done => {
 			config['binary-media-types'] = 'image/jpeg';
@@ -120,35 +127,35 @@ describe('create', () => {
 			config['deploy-proxy-api'] = undefined;
 			createFromDir('hello-world')
 			.then(done.fail, message => expect(message).toEqual('binary-media-types only works with --deploy-proxy-api'))
-			.then(done);
+			.then(() => done());
 		});
 		it('fails if subnetIds is specified without securityGroupIds', done => {
 			config['subnet-ids'] = 'subnet-abcdef12';
 			config['security-group-ids'] = null;
 			createFromDir('hello-world')
 			.then(done.fail, message => expect(message).toEqual('VPC access requires at least one security group id *and* one subnet id'))
-			.then(done);
+			.then(() => done());
 		});
 		it('fails if securityGroupIds is specified without subnetIds', done => {
 			config['subnet-ids'] = null;
 			config['security-group-ids'] = 'sg-12341234';
 			createFromDir('hello-world')
 			.then(done.fail, message => expect(message).toEqual('VPC access requires at least one security group id *and* one subnet id'))
-			.then(done);
+			.then(() => done());
 		});
 		it('fails if the api module contains an extension', done => {
 			config.handler = undefined;
 			config['api-module'] = 'api.js';
 			createFromDir('hello-world')
 			.then(done.fail, message => expect(message).toEqual('API module must be a module name, without the file extension or function name'))
-			.then(done);
+			.then(() => done());
 		});
 		it('fails if claudia.json already exists in the source folder', done => {
 			fs.mkdirSync(workingdir);
 			fs.writeFileSync(path.join(workingdir, 'claudia.json'), '{}', 'utf8');
 			underTest(config)
 			.then(done.fail, message => expect(message).toEqual('claudia.json already exists in the source folder'))
-			.then(done);
+			.then(() => done());
 		});
 		it('works if claudia.json already exists in the source folder but alternative config provided', done => {
 			fs.mkdirSync(workingdir);
@@ -157,7 +164,7 @@ describe('create', () => {
 			process.chdir(workingdir);
 			config.config = 'lambda.json';
 			underTest(config)
-			.then(done, done.fail);
+			.then(() => done(), done.fail);
 		});
 		it('fails if the alternative config is provided but the file already exists', done => {
 			fs.mkdirSync(workingdir);
@@ -167,7 +174,7 @@ describe('create', () => {
 			config.config = 'lambda.json';
 			underTest(config)
 			.then(done.fail, message => expect(message).toEqual('lambda.json already exists'))
-			.then(done);
+			.then(() => done());
 		});
 		it('fails if the alternative config is requested in a non-existent directory', done => {
 			fs.mkdirSync(workingdir);
@@ -177,7 +184,7 @@ describe('create', () => {
 			config.config = path.join('non-existent', 'lambda.json');
 			underTest(config)
 			.then(done.fail, message => expect(message).toEqual('cannot write to non-existent/lambda.json'))
-			.then(done);
+			.then(() => done());
 		});
 
 		it('checks the current folder if the source parameter is not defined', done => {
@@ -186,7 +193,7 @@ describe('create', () => {
 			fs.writeFileSync(path.join('claudia.json'), '{}', 'utf8');
 			underTest(config)
 			.then(done.fail, message => expect(message).toEqual('claudia.json already exists in the source folder'))
-			.then(done);
+			.then(() => done());
 		});
 		it('fails if package.json does not exist in the target folder', done => {
 			fs.mkdirSync(workingdir);
@@ -194,21 +201,21 @@ describe('create', () => {
 			fsUtil.silentRemove(path.join(workingdir, 'package.json'));
 			underTest(config)
 			.then(done.fail, message => expect(message).toEqual('package.json does not exist in the source folder'))
-			.then(done);
+			.then(() => done());
 		});
 		it('fails if local dependencies and optional dependencies are mixed', done => {
 			config['use-local-dependencies'] = true;
 			config['optional-dependencies'] = false;
 			createFromDir('hello-world')
 			.then(done.fail, message => expect(message).toEqual('incompatible arguments --use-local-dependencies and --no-optional-dependencies'))
-			.then(done);
+			.then(() => done());
 		});
 		it('validates the package before creating the role or the function', done => {
 			createFromDir('echo-dependency-problem')
 			.then(() => done.fail('create succeeded'), reason => {
 				expect(reason).toEqual('cannot require ./main after clean installation. Check your dependencies.');
 			})
-			.then(() => iam.getRole({ RoleName: `${testRunName}-executor` }).promise())
+			.then(() => iam.send(new GetRoleCommand({ RoleName: `${testRunName}-executor` })))
 			.then(() => done.fail('iam role was created'), () => {})
 			.then(getLambdaConfiguration)
 			.then(() => done.fail('function was created'), done);
@@ -218,43 +225,43 @@ describe('create', () => {
 			config.role = 'arn:aws:iam::123456789012:role/S3Access';
 			createFromDir('hello-world')
 			.then(done.fail, message => expect(message).toMatch(/incompatible arguments allow-recursion and role/))
-			.then(done);
+			.then(() => done());
 		});
 		it('fails if s3-key is specified but use-s3-bucket is not', done => {
 			config['s3-key'] = 'foo';
 			config['use-s3-bucket'] = undefined;
 			createFromDir('hello-world')
 			.then(done.fail, message => expect(message).toEqual('--s3-key only works with --use-s3-bucket'))
-			.then(done);
+			.then(() => done());
 		});
 	});
 
 	describe('role management', () => {
 		it('creates the IAM role for the lambda', done => {
 			createFromDir('hello-world')
-			.then(() => iam.getRole({ RoleName: `${testRunName}-executor` }).promise())
+			.then(() => iam.send(new GetRoleCommand({ RoleName: `${testRunName}-executor` })))
 			.then(role => expect(role.Role.RoleName).toEqual(`${testRunName}-executor`))
-			.then(done, done.fail);
+			.then(() => done(), done.fail);
 		});
 		describe('when a role is provided', () => {
 			let createdRole, roleName, logger;
 			const invoke = function () {
-				return lambda.invoke({
+				return lambda.send(new InvokeCommand({
 					FunctionName: testRunName,
 					InvocationType: 'RequestResponse'
-				}).promise();
+				}));
 			};
 			beforeEach(done => {
 				roleName = `${testRunName}-manual`;
 				logger = new ArrayLogger();
-				return iam.createRole({
+				return iam.send(new CreateRoleCommand({
 					RoleName: roleName,
 					AssumeRolePolicyDocument: executorPolicy()
-				}).promise()
+				}))
 				.then(result => {
 					createdRole = result.Role;
 				})
-				.then(done, done.fail);
+				.then(() => done(), done.fail);
 			});
 			it('creates the function using the provided role by name', done => {
 				config.role = `${testRunName}-manual`;
@@ -271,15 +278,15 @@ describe('create', () => {
 				.then(invoke)
 				.then(result => JSON.parse(result.Payload))
 				.then(payload => expect(payload).toEqual('hello world'))
-				.then(() => iam.getRole({ RoleName: `${testRunName}-executor` }).promise())
+				.then(() => iam.send(new GetRoleCommand({ RoleName: `${testRunName}-executor` })))
 				.then(() => done.fail('Executor role was created'), done);
 			});
 			it('does not set up any additional cloudwatch policies if --role is provided', done => {
 				config.role = `${testRunName}-manual`;
 				createFromDir('hello-world', logger)
-				.then(() => iam.listRolePolicies({ RoleName: roleName }).promise())
+				.then(() => iam.send(new ListRolePoliciesCommand({ RoleName: roleName })))
 				.then(result => expect(result.PolicyNames).toEqual([]))
-				.then(done, done.fail);
+				.then(() => done(), done.fail);
 			});
 			it('creates the function using the provided role by ARN, without any IAM calls', done => {
 				config.role = createdRole.Arn;
@@ -293,20 +300,20 @@ describe('create', () => {
 				.then(invoke)
 				.then(result => JSON.parse(result.Payload))
 				.then(payload => expect(payload).toEqual('hello world'))
-				.then(() => iam.listRolePolicies({ RoleName: roleName }).promise())
+				.then(() => iam.send(new ListRolePoliciesCommand({ RoleName: roleName })))
 				.then(result => expect(result.PolicyNames).toEqual([]))
-				.then(done, done.fail);
+				.then(() => done(), done.fail);
 			});
 		});
 		it('allows the function to log to cloudwatch', done => {
-			logs.createLogGroup({ logGroupName: `${testRunName}-group` }).promise()
+			logs.send(new CreateLogGroupCommand({ logGroupName: `${testRunName}-group` }))
 			.then(() => {
 				newObjects.logGroup = `${testRunName}-group`;
-				return logs.createLogStream({ logGroupName: `${testRunName}-group`, logStreamName: `${testRunName}-stream` }).promise();
+				return logs.send(new CreateLogStreamCommand({ logGroupName: `${testRunName}-group`, logStreamName: `${testRunName}-stream` }));
 			})
 			.then(() => createFromDir('cloudwatch-log'))
 			.then(() => {
-				return lambda.invoke({
+				return lambda.send(new InvokeCommand({
 					FunctionName: testRunName,
 					Payload: JSON.stringify({
 						region: awsRegion,
@@ -314,21 +321,21 @@ describe('create', () => {
 						group: `${testRunName}-group`,
 						message: `hello ${testRunName}`
 					})
-				}).promise();
+				}));
 			})
 			.then(() => pollForLogEvents(`${testRunName}-group`, `hello ${testRunName}`, awsRegion))
 			.then(events => {
 				expect(events.length).toEqual(1);
 				expect(events[0].message).toEqual(`hello ${testRunName}`);
 			})
-			.then(done, done.fail);
+			.then(() => done(), done.fail);
 		});
 		it('allows function to call itself if --allow-recursion is specified', done => {
 			config['allow-recursion'] = true;
 			createFromDir('hello-world')
-			.then(() => iam.listRolePolicies({ RoleName: `${testRunName}-executor` }).promise())
+			.then(() => iam.send(new ListRolePoliciesCommand({ RoleName: `${testRunName}-executor` })))
 			.then(result => expect(result.PolicyNames).toEqual(['log-writer', 'recursive-execution']))
-			.then(() => iam.getRolePolicy({ PolicyName: 'recursive-execution', RoleName: `${testRunName}-executor` }).promise())
+			.then(() => iam.send(new GetRolePolicyCommand({ PolicyName: 'recursive-execution', RoleName: `${testRunName}-executor` })))
 			.then(policy => {
 				expect(JSON.parse(decodeURIComponent(policy.PolicyDocument))).toEqual(
 					{
@@ -343,7 +350,7 @@ describe('create', () => {
 						}]
 					});
 			})
-			.then(done, e => {
+			.then(() => done(), e => {
 				console.log(e);
 				done.fail();
 			});
@@ -352,7 +359,7 @@ describe('create', () => {
 			let vpc, subnet, securityGroup;
 			const securityGroupName = `${testRunName}SecurityGroup`,
 				CidrBlock = '10.0.0.0/16',
-				ec2 = new aws.EC2({ region: awsRegion }),
+				ec2 = new EC2Client({ region: awsRegion }),
 				vpcPolicy = {
 					'Version': '2012-10-17',
 					'Statement': [{
@@ -370,29 +377,29 @@ describe('create', () => {
 					}]
 				};
 			beforeAll(done => {
-				ec2.createVpc({ CidrBlock: CidrBlock }).promise()
+				ec2.send(new CreateVpcCommand({ CidrBlock: CidrBlock }))
 				.then(vpcData => {
 					vpc = vpcData.Vpc;
-					return ec2.createSubnet({CidrBlock: CidrBlock, VpcId: vpc.VpcId}).promise();
+					return ec2.send(new CreateSubnetCommand({CidrBlock: CidrBlock, VpcId: vpc.VpcId}));
 				})
 				.then(subnetData => {
 					subnet = subnetData.Subnet;
-					return ec2.createSecurityGroup({ GroupName: securityGroupName, Description: 'Temporary testing group', VpcId: vpc.VpcId }).promise();
+					return ec2.send(new CreateSecurityGroupCommand({ GroupName: securityGroupName, Description: 'Temporary testing group', VpcId: vpc.VpcId }));
 				})
 				.then(securityGroupData => {
 					securityGroup = securityGroupData;
 				})
-				.then(done, done.fail);
+				.then(() => done(), done.fail);
 			});
 			beforeEach(() => {
 				config['security-group-ids'] = securityGroup.GroupId;
 				config['subnet-ids'] = subnet.SubnetId;
 			});
 			afterAll(done => {
-				ec2.deleteSubnet({ SubnetId: subnet.SubnetId }).promise()
-				.then(() => ec2.deleteSecurityGroup({ GroupId: securityGroup.GroupId }).promise())
-				.then(() =>  ec2.deleteVpc({ VpcId: vpc.VpcId }).promise())
-				.then(done)
+				ec2.send(new DeleteSubnetCommand({ SubnetId: subnet.SubnetId }))
+				.then(() => ec2.send(new DeleteSecurityGroupCommand({ GroupId: securityGroup.GroupId })))
+				.then(() =>  ec2.send(new DeleteVpcCommand({ VpcId: vpc.VpcId })))
+				.then(() => done())
 				.catch(done.fail);
 			});
 			it('adds subnet and security group membership to the function', done => {
@@ -402,33 +409,33 @@ describe('create', () => {
 					expect(result.VpcConfig.SecurityGroupIds[0]).toEqual(securityGroup.GroupId);
 					expect(result.VpcConfig.SubnetIds[0]).toEqual(subnet.SubnetId);
 				})
-				.then(done, e => {
+				.then(() => done(), e => {
 					console.log(e);
 					done.fail();
 				});
 			});
 			it('adds VPC Access IAM role', done => {
 				createFromDir('hello-world')
-				.then(() => iam.listRolePolicies({ RoleName: `${testRunName}-executor` }).promise())
+				.then(() => iam.send(new ListRolePoliciesCommand({ RoleName: `${testRunName}-executor` })))
 				.then(result => expect(result.PolicyNames).toEqual(['log-writer', 'vpc-access-execution']))
-				.then(() => iam.getRolePolicy({ PolicyName: 'vpc-access-execution', RoleName: `${testRunName}-executor` }).promise())
+				.then(() => iam.send(new GetRolePolicyCommand({ PolicyName: 'vpc-access-execution', RoleName: `${testRunName}-executor` })))
 				.then(policy => {
 					expect(JSON.parse(decodeURIComponent(policy.PolicyDocument))).toEqual(vpcPolicy);
 				})
-				.then(done, done.fail);
+				.then(() => done(), done.fail);
 			});
 			describe('when a role is provided', () => {
 				let createdRoleArn, roleName;
 				beforeEach(done => {
 					roleName = `${testRunName}-manual`;
-					return iam.createRole({
+					return iam.send(new CreateRoleCommand({
 						RoleName: roleName,
 						AssumeRolePolicyDocument: executorPolicy()
-					}).promise()
+					}))
 					.then(result => {
 						createdRoleArn = result.Role.Arn;
 					})
-					.then(done, done.fail);
+					.then(() => done(), done.fail);
 				});
 				afterEach(() => {
 					newObjects.lambdaRole = roleName;
@@ -436,25 +443,25 @@ describe('create', () => {
 				it('patches IAM policies when the role is specified with a name', done => {
 					config.role = roleName;
 					createFromDir('hello-world')
-					.then(() => iam.listRolePolicies({ RoleName: roleName }).promise())
+					.then(() => iam.send(new ListRolePoliciesCommand({ RoleName: roleName })))
 					.then(result => expect(result.PolicyNames).toEqual(['vpc-access-execution']))
-					.then(() => iam.getRolePolicy({ PolicyName: 'vpc-access-execution', RoleName: roleName }).promise())
+					.then(() => iam.send(new GetRolePolicyCommand({ PolicyName: 'vpc-access-execution', RoleName: roleName })))
 					.then(policy => {
 						expect(JSON.parse(decodeURIComponent(policy.PolicyDocument))).toEqual(vpcPolicy);
 					})
-					.then(done, done.fail);
+					.then(() => done(), done.fail);
 				});
 				it('does not try to patch IAM policies if the role is specified with an ARN', done => {
 					config.role = createdRoleArn;
-					return iam.putRolePolicy({
+					return iam.send(new PutRolePolicyCommand({
 						RoleName: roleName,
 						PolicyName: 'test-vpc-access',
 						PolicyDocument: JSON.stringify(vpcPolicy)
-					}).promise()
+					}))
 					.then(() => createFromDir('hello-world'))
-					.then(() => iam.listRolePolicies({ RoleName: roleName }).promise())
+					.then(() => iam.send(new ListRolePoliciesCommand({ RoleName: roleName })))
 					.then(result => expect(result.PolicyNames).toEqual(['test-vpc-access']))
-					.then(done, done.fail);
+					.then(() => done(), done.fail);
 				});
 			});
 
@@ -478,11 +485,11 @@ describe('create', () => {
 			fs.writeFileSync(path.join(workingdir, 'policies', 'subdir', 'ses policy.json'), JSON.stringify(sesPolicy), 'utf8');
 			config.policies = policiesDir;
 			createFromDir('hello-world')
-			.then(() => iam.listRolePolicies({ RoleName: `${testRunName}-executor` }).promise())
+			.then(() => iam.send(new ListRolePoliciesCommand({ RoleName: `${testRunName}-executor` })))
 			.then(result => expect(result.PolicyNames).toEqual(['log-writer', 'ses-policy-json']))
-			.then(() => iam.getRolePolicy({ PolicyName: 'ses-policy-json', RoleName: `${testRunName}-executor` }).promise())
+			.then(() => iam.send(new GetRolePolicyCommand({ PolicyName: 'ses-policy-json', RoleName: `${testRunName}-executor` })))
 			.then(policy => expect(JSON.parse(decodeURIComponent(policy.PolicyDocument))).toEqual(sesPolicy))
-			.then(done, done.fail);
+			.then(() => done(), done.fail);
 		});
 		it('loads additional policies from a file pattern, if provided', done => {
 			const sesPolicy = {
@@ -501,17 +508,17 @@ describe('create', () => {
 			fs.writeFileSync(path.join(workingdir, 'policies', 'ses policy.json'), JSON.stringify(sesPolicy), 'utf8');
 			config.policies = path.join(policiesDir, '*.json');
 			createFromDir('hello-world')
-			.then(() =>  iam.listRolePolicies({ RoleName: `${testRunName}-executor` }).promise())
+			.then(() =>  iam.send(new ListRolePoliciesCommand({ RoleName: `${testRunName}-executor` })))
 			.then(result => expect(result.PolicyNames).toEqual(['log-writer', 'ses-policy-json']))
-			.then(() => iam.getRolePolicy({ PolicyName: 'ses-policy-json', RoleName: `${testRunName}-executor` }).promise())
+			.then(() => iam.send(new GetRolePolicyCommand({ PolicyName: 'ses-policy-json', RoleName: `${testRunName}-executor` })))
 			.then(policy => expect(JSON.parse(decodeURIComponent(policy.PolicyDocument))).toEqual(sesPolicy))
-			.then(done, done.fail);
+			.then(() => done(), done.fail);
 		});
 		it('fails if the policies argument does not match any files', done => {
 			config.policies = path.join('*.NOT');
 			createFromDir('hello-world')
 			.then(done.fail, error => expect(error).toEqual('no files match additional policies (*.NOT)'))
-			.then(() => iam.getRole({ RoleName: `${testRunName}-executor` }).promise())
+			.then(() => iam.send(new GetRoleCommand({ RoleName: `${testRunName}-executor` })))
 			.then(() => done.fail('iam role was created'), () => {})
 			.then(getLambdaConfiguration)
 			.then(() => done.fail('function was created'), done);
@@ -522,7 +529,7 @@ describe('create', () => {
 			createFromDir('hello-world')
 			.then(getLambdaConfiguration)
 			.then(lambdaResult => expect(lambdaResult.Runtime).toEqual(defaultRuntime))
-			.then(done, done.fail);
+			.then(() => done(), done.fail);
 		});
 		supportedRuntimes.forEach(supportedRuntime => {
 			it(`can create ${supportedRuntime} when requested`, done => {
@@ -530,7 +537,7 @@ describe('create', () => {
 				createFromDir('hello-world')
 				.then(getLambdaConfiguration)
 				.then(lambdaResult => expect(lambdaResult.Runtime).toEqual(supportedRuntime))
-				.then(done, done.fail);
+				.then(() => done(), done.fail);
 			});
 		});
 
@@ -540,38 +547,38 @@ describe('create', () => {
 			config.memory = limits.LAMBDA.MEMORY.MIN - 64;
 			createFromDir('hello-world')
 			.then(done.fail, error => expect(error).toEqual(`the memory value provided must be greater than or equal to ${limits.LAMBDA.MEMORY.MIN}`))
-			.then(done, done.fail);
+			.then(() => done(), done.fail);
 		});
 		it('fails if memory value is 0', done => {
 			config.memory = 0;
 			createFromDir('hello-world')
 			.then(done.fail, error => expect(error).toEqual(`the memory value provided must be greater than or equal to ${limits.LAMBDA.MEMORY.MIN}`))
-			.then(done, done.fail);
+			.then(() => done(), done.fail);
 		});
 		it(`fails if memory value is > ${limits.LAMBDA.MEMORY.MAX}`, done => {
 			config.memory = limits.LAMBDA.MEMORY.MAX + 64;
 			createFromDir('hello-world')
 			.then(done.fail, error => expect(error).toEqual(`the memory value provided must be less than or equal to ${limits.LAMBDA.MEMORY.MAX}`))
-			.then(done, done.fail);
+			.then(() => done(), done.fail);
 		});
 		it('fails if memory value is not a multiple of 64', done => {
 			config.memory = limits.LAMBDA.MEMORY.MIN + 2;
 			createFromDir('hello-world')
 			.then(done.fail, error => expect(error).toEqual('the memory value provided must be a multiple of 64'))
-			.then(done, done.fail);
+			.then(() => done(), done.fail);
 		});
 		it(`creates memory size of ${limits.LAMBDA.MEMORY.MIN} MB by default`, done => {
 			createFromDir('hello-world')
 			.then(getLambdaConfiguration)
 			.then(lambdaResult => expect(lambdaResult.MemorySize).toEqual(limits.LAMBDA.MEMORY.MIN))
-			.then(done, done.fail);
+			.then(() => done(), done.fail);
 		});
 		it('can specify memory size using the --memory argument', done => {
 			config.memory = limits.LAMBDA.MEMORY.MAX;
 			createFromDir('hello-world')
 			.then(getLambdaConfiguration)
 			.then(lambdaResult => expect(lambdaResult.MemorySize).toEqual(limits.LAMBDA.MEMORY.MAX))
-			.then(done, done.fail);
+			.then(() => done(), done.fail);
 		});
 	});
 	describe('timeout option support', () => {
@@ -579,42 +586,42 @@ describe('create', () => {
 			config.timeout = 0;
 			createFromDir('hello-world')
 			.then(done.fail, error => expect(error).toEqual('the timeout value provided must be greater than or equal to 1'))
-			.then(done, done.fail);
+			.then(() => done(), done.fail);
 		});
 		it('fails if timeout value is > 900', done => {
 			config.timeout = 901;
 			createFromDir('hello-world')
 			.then(done.fail, error => expect(error).toEqual('the timeout value provided must be less than or equal to 900'))
-			.then(done, done.fail);
+			.then(() => done(), done.fail);
 		});
 		it('creates timeout of 3 seconds by default', done => {
 			createFromDir('hello-world')
 			.then(getLambdaConfiguration)
 			.then(lambdaResult => expect(lambdaResult.Timeout).toEqual(3))
-			.then(done, done.fail);
+			.then(() => done(), done.fail);
 		});
 		it('can specify timeout using the --timeout argument', done => {
 			config.timeout = 900;
 			createFromDir('hello-world')
 			.then(getLambdaConfiguration)
 			.then(lambdaResult => expect(lambdaResult.Timeout).toEqual(900))
-			.then(done, done.fail);
+			.then(() => done(), done.fail);
 		});
 	});
 	describe('creating the function', () => {
 		it('wires up the handler so the function is executable', done => {
 			createFromDir('echo')
 			.then(() => {
-				return lambda.invoke({
+				return lambda.send(new InvokeCommand({
 					FunctionName: testRunName,
 					InvocationType: 'RequestResponse',
 					Payload: JSON.stringify({
 						message: `hello ${testRunName}`
 					})
-				}).promise();
+				}));
 			})
 			.then(result => expect(JSON.parse(result.Payload)).toEqual({ message: `hello ${testRunName}` }))
-			.then(done, done.fail);
+			.then(() => done(), done.fail);
 		});
 		it('wires up handlers from subfolders', done => {
 			fs.mkdirSync(workingdir);
@@ -625,16 +632,16 @@ describe('create', () => {
 			process.chdir(workingdir);
 			underTest(config)
 			.then(() => {
-				return lambda.invoke({
+				return lambda.send(new InvokeCommand({
 					FunctionName: testRunName,
 					InvocationType: 'RequestResponse',
 					Payload: JSON.stringify({
 						message: `hello ${testRunName}`
 					})
-				}).promise();
+				}));
 			})
 			.then(result => expect(JSON.parse(result.Payload)).toEqual({ message: `hello ${testRunName}` }))
-			.then(done, done.fail);
+			.then(() => done(), done.fail);
 		});
 
 		it('returns an object containing the new claudia configuration', done => {
@@ -646,7 +653,7 @@ describe('create', () => {
 					name: testRunName
 				});
 			})
-			.then(done, done.fail);
+			.then(() => done(), done.fail);
 		});
 		it('uses the name from package.json if --name is not specified', done => {
 			config.name = undefined;
@@ -658,9 +665,9 @@ describe('create', () => {
 					name: 'hello-world2'
 				});
 			})
-			.then(() => lambda.getFunctionConfiguration({ FunctionName: 'hello-world2' }).promise())
+			.then(() => lambda.send(new GetFunctionConfigurationCommand({ FunctionName: 'hello-world2' })))
 			.then(lambdaResult => expect(lambdaResult.Runtime).toEqual(defaultRuntime))
-			.then(done, done.fail);
+			.then(() => done(), done.fail);
 		});
 		it('renames scoped NPM packages to a sanitized Lambda name', done => {
 			config.name = undefined;
@@ -672,27 +679,27 @@ describe('create', () => {
 					name: 'test_hello-world'
 				});
 			})
-			.then(() => lambda.getFunctionConfiguration({ FunctionName: 'test_hello-world' }).promise())
+			.then(() => lambda.send(new GetFunctionConfigurationCommand({ FunctionName: 'test_hello-world' })))
 			.then(lambdaResult => expect(lambdaResult.Runtime).toEqual(defaultRuntime))
-			.then(done, done.fail);
+			.then(() => done(), done.fail);
 		});
 		it('uses the package.json description field if --description is not provided', done => {
 			createFromDir('package-description')
 			.then(getLambdaConfiguration)
 			.then(lambdaResult => expect(lambdaResult.Description).toEqual('This is the package description'))
-			.then(done, done.fail);
+			.then(() => done(), done.fail);
 		});
 		it('uses --description as the lambda description even if the package.json description field is provided', done => {
 			config.description = 'description from config';
 			createFromDir('package-description')
 			.then(getLambdaConfiguration)
 			.then(lambdaResult => expect(lambdaResult.Description).toEqual('description from config'))
-			.then(done, done.fail);
+			.then(() => done(), done.fail);
 		});
 		it('saves the configuration into claudia.json', done => {
 			createFromDir('hello-world')
 			.then(creationResult => expect(JSON.parse(fs.readFileSync(path.join(workingdir, 'claudia.json'), 'utf8'))).toEqual(creationResult))
-			.then(done, done.fail);
+			.then(() => done(), done.fail);
 		});
 		it('saves the configuration into an alternative configuration file if provided', done => {
 			config.config = path.join(workingdir, 'lambda.json');
@@ -701,40 +708,40 @@ describe('create', () => {
 				expect(fs.existsSync(path.join(workingdir, 'claudia.json'))).toBeFalsy();
 				expect(JSON.parse(fs.readFileSync(path.join(workingdir, 'lambda.json'), 'utf8'))).toEqual(creationResult);
 			})
-			.then(done, done.fail);
+			.then(() => done(), done.fail);
 		});
 		it('configures the function in AWS so it can be invoked', done => {
 			createFromDir('hello-world')
-			.then(() => lambda.invoke({ FunctionName: testRunName }).promise())
+			.then(() => lambda.send(new InvokeCommand({ FunctionName: testRunName })))
 			.then(lambdaResult => {
 				expect(lambdaResult.StatusCode).toEqual(200);
 				expect(lambdaResult.Payload).toEqual('"hello world"');
 			})
-			.then(done, done.fail);
+			.then(() => done(), done.fail);
 		});
 		it('configures the function so it will be versioned', done => {
 			createFromDir('hello-world')
-			.then(() => lambda.listVersionsByFunction({ FunctionName: testRunName }).promise())
+			.then(() => lambda.send(new ListVersionsByFunctionCommand({ FunctionName: testRunName })))
 			.then(result => {
 				expect(result.Versions.length).toEqual(2);
 				expect(result.Versions[0].Version).toEqual('$LATEST');
 				expect(result.Versions[1].Version).toEqual('1');
 			})
-			.then(done, done.fail);
+			.then(() => done(), done.fail);
 		});
 		it('adds the latest alias', done => {
 			config.version = 'great';
 			createFromDir('hello-world')
-			.then(() => lambda.getAlias({ FunctionName: testRunName, Name: 'latest' }).promise())
+			.then(() => lambda.send(new GetAliasCommand({ FunctionName: testRunName, Name: 'latest' })))
 			.then(result => expect(result.FunctionVersion).toEqual('$LATEST'))
-			.then(done, done.fail);
+			.then(() => done(), done.fail);
 		});
 		it('adds the version alias if supplied', done => {
 			config.version = 'great';
 			createFromDir('hello-world')
-			.then(() => lambda.getAlias({ FunctionName: testRunName, Name: 'great' }).promise())
+			.then(() => lambda.send(new GetAliasCommand({ FunctionName: testRunName, Name: 'great' })))
 			.then(result => expect(result.FunctionVersion).toEqual('1'))
-			.then(done, done.fail);
+			.then(() => done(), done.fail);
 		});
 		it('uses local dependencies if requested', done => {
 			const projectDir =  path.join(__dirname, 'test-projects', 'local-dependencies');
@@ -743,12 +750,12 @@ describe('create', () => {
 			fs.mkdirSync(path.join(projectDir, 'node_modules'));
 			fsUtil.copy(path.join(projectDir, 'local_modules'),  path.join(projectDir, 'node_modules'), true);
 			createFromDir('local-dependencies')
-			.then(() => lambda.invoke({ FunctionName: testRunName }).promise())
+			.then(() => lambda.send(new InvokeCommand({ FunctionName: testRunName })))
 			.then(lambdaResult => {
 				expect(lambdaResult.StatusCode).toEqual(200);
 				expect(lambdaResult.Payload).toEqual('"hello local"');
 			})
-			.then(done, done.fail);
+			.then(() => done(), done.fail);
 		});
 		it('rewires relative local dependencies to reference original location after copy', done => {
 			fs.mkdirSync(workingdir);
@@ -761,31 +768,31 @@ describe('create', () => {
 				newObjects.restApi = result.api && result.api.id;
 				return result;
 			})
-			.then(() => lambda.invoke({ FunctionName: testRunName }).promise())
+			.then(() => lambda.send(new InvokeCommand({ FunctionName: testRunName })))
 			.then(lambdaResult => {
 				expect(lambdaResult.StatusCode).toEqual(200);
 				expect(lambdaResult.Payload).toEqual('"hello relative"');
 			})
-			.then(done, done.fail);
+			.then(() => done(), done.fail);
 		});
 		it('removes optional dependencies after validation if requested', done => {
 			config['optional-dependencies'] = false;
 			createFromDir('optional-dependencies')
-			.then(() => lambda.invoke({ FunctionName: testRunName }).promise())
+			.then(() => lambda.send(new InvokeCommand({ FunctionName: testRunName })))
 			.then(lambdaResult => {
 				expect(lambdaResult.StatusCode).toEqual(200);
 				expect(JSON.parse(lambdaResult.Payload).modules.filter(t => !t.startsWith('.'))).toEqual(['huh']);
 			})
-			.then(done, done.fail);
+			.then(() => done(), done.fail);
 		});
 		it('removes .npmrc from the package', done => {
 			createFromDir('ls-dir')
-			.then(() => lambda.invoke({ FunctionName: testRunName }).promise())
+			.then(() => lambda.send(new InvokeCommand({ FunctionName: testRunName })))
 			.then(lambdaResult => {
 				expect(lambdaResult.StatusCode).toEqual(200);
 				expect(JSON.parse(lambdaResult.Payload).files).not.toContain('.npmrc');
 			})
-			.then(done, done.fail);
+			.then(() => done(), done.fail);
 		});
 		it('keeps the archive on the disk if --keep is specified', done => {
 			config.keep = true;
@@ -794,7 +801,7 @@ describe('create', () => {
 				expect(result.archive).toBeTruthy();
 				expect(fs.existsSync(result.archive)).toBeTruthy();
 			})
-			.then(done, done.fail);
+			.then(() => done(), done.fail);
 		});
 		it('uses a s3 bucket if provided', done => {
 			const logger = new ArrayLogger(),
@@ -802,9 +809,9 @@ describe('create', () => {
 			let archivePath;
 			config.keep = true;
 			config['use-s3-bucket'] = bucketName;
-			s3.createBucket({
+			s3.send(new CreateBucketCommand({
 				Bucket: bucketName
-			}).promise()
+			}))
 			.then(() => {
 				newObjects.s3bucket = bucketName;
 			})
@@ -813,19 +820,19 @@ describe('create', () => {
 				const expectedKey = path.basename(result.archive);
 				archivePath = result.archive;
 				expect(result.s3key).toEqual(expectedKey);
-				return s3.headObject({
+				return s3.send(new HeadObjectCommand({
 					Bucket: bucketName,
 					Key: expectedKey
-				}).promise();
+				}));
 			})
 			.then(fileResult => expect(parseInt(fileResult.ContentLength)).toEqual(fs.statSync(archivePath).size))
-			.then(() => expect(logger.getApiCallLogForService('s3', true)).toEqual(['s3.upload', 's3.getSignatureVersion']))
-			.then(() => lambda.invoke({ FunctionName: testRunName }).promise())
+			.then(() => expect(logger.getApiCallLogForService('s3', true)).toEqual(['s3.PutObjectCommand']))
+			.then(() => lambda.send(new InvokeCommand({ FunctionName: testRunName })))
 			.then(lambdaResult => {
 				expect(lambdaResult.StatusCode).toEqual(200);
 				expect(lambdaResult.Payload).toEqual('"hello world"');
 			})
-			.then(done, done.fail);
+			.then(() => done(), done.fail);
 		});
 		it('uses a s3 bucket with server side encryption if provided', done => {
 			const logger = new ArrayLogger(),
@@ -835,14 +842,14 @@ describe('create', () => {
 			config.keep = true;
 			config['use-s3-bucket'] = bucketName;
 			config['s3-sse'] = serverSideEncryption;
-			s3.createBucket({
+			s3.send(new CreateBucketCommand({
 				Bucket: bucketName
-			}).promise()
+			}))
 			.then(() => {
 				newObjects.s3bucket = bucketName;
 			})
 			.then(() => {
-				return s3.putBucketEncryption({
+				return s3.send(new PutBucketEncryptionCommand({
 					Bucket: bucketName,
 					ServerSideEncryptionConfiguration: {
 						Rules: [
@@ -853,10 +860,10 @@ describe('create', () => {
 							}
 						]
 					}
-				}).promise();
+				}));
 			})
 			.then(() => {
-				return s3.putBucketPolicy({
+				return s3.send(new PutBucketPolicyCommand({
 					Bucket: bucketName,
 					Policy: `{
 						"Version": "2012-10-17",
@@ -875,26 +882,26 @@ describe('create', () => {
 							}
 						]
 					}`
-				}).promise();
+				}));
 			})
 			.then(() => createFromDir('hello-world', logger))
 			.then(result => {
 				const expectedKey = path.basename(result.archive);
 				archivePath = result.archive;
 				expect(result.s3key).toEqual(expectedKey);
-				return s3.headObject({
+				return s3.send(new HeadObjectCommand({
 					Bucket: bucketName,
 					Key: expectedKey
-				}).promise();
+				}));
 			})
 			.then(fileResult => expect(parseInt(fileResult.ContentLength)).toEqual(fs.statSync(archivePath).size))
-			.then(() => expect(logger.getApiCallLogForService('s3', true)).toEqual(['s3.upload', 's3.getSignatureVersion']))
-			.then(() => lambda.invoke({ FunctionName: testRunName }).promise())
+			.then(() => expect(logger.getApiCallLogForService('s3', true)).toEqual(['s3.PutObjectCommand']))
+			.then(() => lambda.send(new InvokeCommand({ FunctionName: testRunName })))
 			.then(lambdaResult => {
 				expect(lambdaResult.StatusCode).toEqual(200);
 				expect(lambdaResult.Payload).toEqual('"hello world"');
 			})
-			.then(done, done.fail);
+			.then(() => done(), done.fail);
 		});
 		it('uses an s3 key if provided', done => {
 			const logger = new ArrayLogger(),
@@ -904,9 +911,9 @@ describe('create', () => {
 			config.keep = true;
 			config['use-s3-bucket'] = bucketName;
 			config['s3-key'] = keyName;
-			s3.createBucket({
+			s3.send(new CreateBucketCommand({
 				Bucket: bucketName
-			}).promise()
+			}))
 			.then(() => {
 				newObjects.s3Bucket = bucketName;
 				newObjects.s3Key = keyName;
@@ -916,19 +923,19 @@ describe('create', () => {
 				const expectedKey = keyName;
 				archivePath = result.archive;
 				expect(result.s3key).toEqual(expectedKey);
-				return s3.headObject({
+				return s3.send(new HeadObjectCommand({
 					Bucket: bucketName,
 					Key: expectedKey
-				}).promise();
+				}));
 			})
 			.then(fileResult => expect(parseInt(fileResult.ContentLength)).toEqual(fs.statSync(archivePath).size))
-			.then(() => expect(logger.getApiCallLogForService('s3', true)).toEqual(['s3.upload', 's3.getSignatureVersion']))
-			.then(() => lambda.invoke({ FunctionName: testRunName }).promise())
+			.then(() => expect(logger.getApiCallLogForService('s3', true)).toEqual(['s3.PutObjectCommand']))
+			.then(() => lambda.send(new InvokeCommand({ FunctionName: testRunName })))
 			.then(lambdaResult => {
 				expect(lambdaResult.StatusCode).toEqual(200);
 				expect(lambdaResult.Payload).toEqual('"hello world"');
 			})
-			.then(done, done.fail);
+			.then(() => done(), done.fail);
 		});
 	});
 	describe('deploying a proxy api', () => {
@@ -945,7 +952,7 @@ describe('create', () => {
 			})
 			.then(apiId => apiGatewayPromise.getRestApiPromise({ restApiId: apiId }))
 			.then(restApi => expect(restApi.name).toEqual(testRunName))
-			.then(done, done.fail);
+			.then(() => done(), done.fail);
 		});
 		it('creates a proxy web API using a handler from a subfolder', done => {
 			fs.mkdirSync(workingdir);
@@ -964,7 +971,7 @@ describe('create', () => {
 				expect(params.path).toEqual('/');
 				expect(params.requestContext.stage).toEqual('latest');
 			})
-			.then(done, done.fail);
+			.then(() => done(), done.fail);
 		});
 		it('saves the api ID without module into claudia.json', done => {
 			createFromDir('apigw-proxy-echo')
@@ -972,7 +979,7 @@ describe('create', () => {
 				const savedContents = JSON.parse(fs.readFileSync(path.join(workingdir, 'claudia.json'), 'utf8'));
 				expect(savedContents.api).toEqual({ id: creationResult.api.id });
 			})
-			.then(done, done.fail);
+			.then(() => done(), done.fail);
 		});
 		it('sets up the API to route sub-resource calls to Lambda', done => {
 			createFromDir('apigw-proxy-echo')
@@ -985,7 +992,7 @@ describe('create', () => {
 				expect(params.path).toEqual('/hello/there');
 				expect(params.requestContext.stage).toEqual('latest');
 			})
-			.then(done, done.fail);
+			.then(() => done(), done.fail);
 		});
 		it('sets up the API to route root calls to Lambda', done => {
 			createFromDir('apigw-proxy-echo')
@@ -998,7 +1005,7 @@ describe('create', () => {
 				expect(params.path).toEqual('/');
 				expect(params.requestContext.stage).toEqual('latest');
 			})
-			.then(done, done.fail);
+			.then(() => done(), done.fail);
 		});
 
 		it('sets up a versioned API with the stage name corresponding to the lambda alias', done => {
@@ -1013,7 +1020,7 @@ describe('create', () => {
 				expect(params.path).toEqual('/hello/there');
 				expect(params.requestContext.stage).toEqual('development');
 			})
-			.then(done, done.fail);
+			.then(() => done(), done.fail);
 		});
 		it('sets up binary media types corresponding to the binary-media-types options', done => {
 			config['binary-media-types'] = 'image/png,image/jpeg';
@@ -1021,14 +1028,14 @@ describe('create', () => {
 			.then(creationResult => creationResult.api.id)
 			.then(apiId => apiGatewayPromise.getRestApiPromise({ restApiId: apiId }))
 			.then(restApi => expect(restApi.binaryMediaTypes).toEqual(['image/png', 'image/jpeg']))
-			.then(done, done.fail);
+			.then(() => done(), done.fail);
 		});
 		it('sets up binary media types to */* if binary-media-types option is not provided', done => {
 			createFromDir('apigw-proxy-echo')
 			.then(creationResult => creationResult.api.id)
 			.then(apiId => apiGatewayPromise.getRestApiPromise({ restApiId: apiId }))
 			.then(restApi => expect(restApi.binaryMediaTypes).toEqual(['*/*']))
-			.then(done, done.fail);
+			.then(() => done(), done.fail);
 		});
 		it('sets up binary media types to undefined if binary-media-types option is provided as an empty string', done => {
 			config['binary-media-types'] = '';
@@ -1036,7 +1043,7 @@ describe('create', () => {
 			.then(creationResult => creationResult.api.id)
 			.then(apiId => apiGatewayPromise.getRestApiPromise({ restApiId: apiId }))
 			.then(restApi => expect(restApi.binaryMediaTypes).toBeUndefined([]))
-			.then(done, done.fail);
+			.then(() => done(), done.fail);
 		});
 	});
 	describe('creating the web api', () => {
@@ -1056,7 +1063,7 @@ describe('create', () => {
 			})
 			.then(apiId => apiGatewayPromise.getRestApiPromise({ restApiId: apiId }))
 			.then(restApi => expect(restApi.name).toEqual(testRunName))
-			.then(done, done.fail);
+			.then(() => done(), done.fail);
 		});
 		it('saves the api name and module only into claudia.json', done => {
 			createFromDir('api-gw-hello-world')
@@ -1064,7 +1071,7 @@ describe('create', () => {
 				const savedContents = JSON.parse(fs.readFileSync(path.join(workingdir, 'claudia.json'), 'utf8'));
 				expect(savedContents.api).toEqual({ id: creationResult.api.id, module: creationResult.api.module });
 			})
-			.then(done, done.fail);
+			.then(() => done(), done.fail);
 		});
 		it('works when the source is a relative path', done => {
 			const workingParent = path.dirname(workingdir),
@@ -1076,7 +1083,7 @@ describe('create', () => {
 				const savedContents = JSON.parse(fs.readFileSync(path.join(workingdir, 'claudia.json'), 'utf8'));
 				expect(savedContents.api).toEqual({ id: creationResult.api.id, module: creationResult.api.module });
 			})
-			.then(done, done.fail);
+			.then(() => done(), done.fail);
 		});
 		it('uses the name from package.json if --name is not provided', done => {
 			config.name = undefined;
@@ -1088,7 +1095,7 @@ describe('create', () => {
 			})
 			.then(apiId => apiGatewayPromise.getRestApiPromise({ restApiId: apiId }))
 			.then(restApi => expect(restApi.name).toEqual('api-gw-hello-world'))
-			.then(done, done.fail);
+			.then(() => done(), done.fail);
 		});
 
 		it('when no version provided, creates the latest deployment', done => {
@@ -1096,7 +1103,7 @@ describe('create', () => {
 			.then(creationResult => creationResult.api.id)
 			.then(apiId => callApi(apiId, awsRegion, 'latest/hello'))
 			.then(contents => expect(contents.body).toEqual('"hello world"'))
-			.then(done, done.fail);
+			.then(() => done(), done.fail);
 		});
 		it('wires up the api module from a subfolder', done => {
 			fs.mkdirSync(workingdir);
@@ -1110,7 +1117,7 @@ describe('create', () => {
 			.then(creationResult => creationResult.api.id)
 			.then(apiId => callApi(apiId, awsRegion, 'latest/hello'))
 			.then(contents => expect(contents.body).toEqual('"hello world"'))
-			.then(done, done.fail);
+			.then(() => done(), done.fail);
 		});
 
 		it('when the version is provided, creates the deployment with that name', done => {
@@ -1122,7 +1129,7 @@ describe('create', () => {
 			})
 			.then(() => callApi(apiId, awsRegion, 'development/hello'))
 			.then(contents => expect(contents.body).toEqual('"hello world"'))
-			.then(done, done.fail);
+			.then(() => done(), done.fail);
 		});
 
 		it('adds an api config cache if requested', done => {
@@ -1137,7 +1144,7 @@ describe('create', () => {
 					claudiaConfig: '-EDMbG0OcNlCZzstFc2jH6rlpI1YDlNYc9YGGxUFuXo='
 				});
 			})
-			.then(done, done.fail);
+			.then(() => done(), done.fail);
 		});
 
 		it('makes it possible to deploy a custom stage, as long as the lambdaVersion is defined', done => {
@@ -1155,7 +1162,7 @@ describe('create', () => {
 			})
 			.then(() => callApi(apiId, awsRegion, 'fromtest/hello', { retry: 403 }))
 			.then(contents => expect(contents.body).toEqual('"hello world"'))
-			.then(done, e => {
+			.then(() => done(), e => {
 				console.log(JSON.stringify(e));
 				done.fail();
 			});
@@ -1180,12 +1187,12 @@ describe('create', () => {
 					'postinstallapiid': apiId,
 					'postinstallregion': awsRegion,
 					'postinstallapiUrl': `https://${apiId}.execute-api.${awsRegion}.amazonaws.com/development`,
-					'hasAWS': 'true',
+					'hasAWS': 'false',
 					'postinstalloption': 'option-123',
 					'lambdaVersion': 'development'
 				});
 			})
-			.then(done, e => {
+			.then(() => done(), e => {
 				console.log(JSON.stringify(e));
 				done.fail();
 			});
@@ -1193,7 +1200,7 @@ describe('create', () => {
 		it('works with non-reentrant modules', done => {
 			global.MARKED = false;
 			createFromDir('non-reentrant')
-			.then(done, done.fail);
+			.then(() => done(), done.fail);
 		});
 	});
 	it('logs call execution', done => {
@@ -1235,7 +1242,7 @@ describe('create', () => {
 				'apigateway.createDeployment'
 			]);
 		})
-		.then(done, done.fail);
+		.then(() => done(), done.fail);
 	});
 	describe('environment variables', () => {
 		let standardEnvKeys, logger;
@@ -1249,19 +1256,19 @@ describe('create', () => {
 		it('does not add any additional environment variables if set-env not provided', done => {
 			createFromDir('env-vars')
 			.then(() => {
-				return lambda.getFunctionConfiguration({
+				return lambda.send(new GetFunctionConfigurationCommand({
 					FunctionName: testRunName
-				}).promise();
+				}));
 			})
 			.then(configuration => expect(configuration.Environment).toBeUndefined())
 			.then(() => {
-				return lambda.invoke({
+				return lambda.send(new InvokeCommand({
 					FunctionName: testRunName,
 					InvocationType: 'RequestResponse'
-				}).promise();
+				}));
 			})
 			.then(result => expect(Object.keys(JSON.parse(result.Payload)).sort()).toEqual(standardEnvKeys))
-			.then(done, done.fail);
+			.then(() => done(), done.fail);
 		});
 		it('refuses to work when reading environment variables fails', done => {
 			config['set-env'] = 'XPATH,YPATH=/var/lib';
@@ -1271,15 +1278,15 @@ describe('create', () => {
 				expect(logger.getApiCallLogForService('lambda', true)).toEqual([]);
 				expect(logger.getApiCallLogForService('iam', true)).toEqual([]);
 			})
-			.then(done);
+			.then(() => done());
 		});
 		it('adds env variables specified in a key-value pair', done => {
 			config['set-env'] = 'XPATH=/var/www,YPATH=/var/lib';
 			createFromDir('env-vars')
 			.then(() => {
-				return lambda.getFunctionConfiguration({
+				return lambda.send(new GetFunctionConfigurationCommand({
 					FunctionName: testRunName
-				}).promise();
+				}));
 			})
 			.then(configuration => {
 				expect(configuration.Environment).toEqual({
@@ -1290,10 +1297,10 @@ describe('create', () => {
 				});
 			})
 			.then(() => {
-				return lambda.invoke({
+				return lambda.send(new InvokeCommand({
 					FunctionName: testRunName,
 					InvocationType: 'RequestResponse'
-				}).promise();
+				}));
 			})
 			.then(result => JSON.parse(result.Payload))
 			.then(env => {
@@ -1301,7 +1308,7 @@ describe('create', () => {
 				expect(env.XPATH).toEqual('/var/www');
 				expect(env.YPATH).toEqual('/var/lib');
 			})
-			.then(done, done.fail);
+			.then(() => done(), done.fail);
 		});
 		it('adds env variables specified in a JSON file', done => {
 			const envpath = path.join(workingdir, 'env.json');
@@ -1310,9 +1317,9 @@ describe('create', () => {
 			config['set-env-from-json'] = envpath;
 			createFromDir('env-vars')
 			.then(() => {
-				return lambda.getFunctionConfiguration({
+				return lambda.send(new GetFunctionConfigurationCommand({
 					FunctionName: testRunName
-				}).promise();
+				}));
 			})
 			.then(configuration => {
 				expect(configuration.Environment).toEqual({
@@ -1323,10 +1330,10 @@ describe('create', () => {
 				});
 			})
 			.then(() => {
-				return lambda.invoke({
+				return lambda.send(new InvokeCommand({
 					FunctionName: testRunName,
 					InvocationType: 'RequestResponse'
-				}).promise();
+				}));
 			})
 			.then(result => JSON.parse(result.Payload))
 			.then(env => {
@@ -1334,7 +1341,7 @@ describe('create', () => {
 				expect(env.XPATH).toEqual('/var/www');
 				expect(env.YPATH).toEqual('/var/lib');
 			})
-			.then(done, done.fail);
+			.then(() => done(), done.fail);
 		});
 		it('tries to set the KMS key ARN', done => {
 			// note, creating a KMS key costs $1 each time, so
@@ -1344,29 +1351,29 @@ describe('create', () => {
 			config['env-kms-key-arn'] = 'arn:a:b:c:d';
 			createFromDir('env-vars')
 			.then(done.fail, err => {
-				expect(err.code).toEqual('ValidationException');
+				expect(err.name).toEqual('ValidationException');
 				expect(err.message).toMatch(/Value 'arn:a:b:c:d' at 'kMSKeyArn' failed to satisfy constraint/);
 			})
-			.then(done, done.fail);
+			.then(() => done(), done.fail);
 		});
 		it('loads up the environment variables while validating the package to allow any code that expects them to initialize -- fix for https://github.com/claudiajs/claudia/issues/96', done => {
 			config['set-env'] = 'TEST_VAR=abc';
 			config.handler = undefined;
 			config['api-module'] = 'main';
 			process.env.TEST_VAR = '';
-			createFromDir('throw-if-not-env').then(done, done.fail);
+			createFromDir('throw-if-not-env').then(() => done(), done.fail);
 		});
 	});
 	describe('layer support', () => {
 		let layers;
 		const createLayer = function (layerName, filePath) {
 				return lambdaCode(s3, filePath)
-					.then(contents => lambda.publishLayerVersion({LayerName: layerName, Content: contents}).promise());
+					.then(contents => lambda.send(new PublishLayerVersionCommand({LayerName: layerName, Content: contents})));
 			}, deleteLayer = function (layer) {
-				return lambda.deleteLayerVersion({
+				return lambda.send(new DeleteLayerVersionCommand({
 					LayerName: layer.LayerArn,
 					VersionNumber: layer.Version
-				}).promise();
+				}));
 			};
 		beforeAll((done) => {
 			const prefix = 'test' + Date.now();
@@ -1375,10 +1382,10 @@ describe('create', () => {
 				createLayer(prefix + '-layer-text', path.join(__dirname, 'test-layers', 'text-layer.zip'))
 			])
 			.then(results => layers = results)
-			.then(done, done.fail);
+			.then(() => done(), done.fail);
 		});
 		afterAll((done) => {
-			Promise.all(layers.map(deleteLayer)).then(done, done.fail);
+			Promise.all(layers.map(deleteLayer)).then(() => done(), done.fail);
 		});
 		it('attaches no layers by default', (done) => {
 			createFromDir('hello-world')
@@ -1386,7 +1393,7 @@ describe('create', () => {
 			.then(configuration => {
 				expect(configuration.Layers).toBeFalsy();
 			})
-			.then(done, done.fail);
+			.then(() => done(), done.fail);
 		});
 		it('attaches a single layer if requested', (done) => {
 			config.layers = layers[0].LayerVersionArn;
@@ -1395,7 +1402,7 @@ describe('create', () => {
 			.then(configuration => {
 				expect(configuration.Layers.map(l => l.Arn)).toEqual([layers[0].LayerVersionArn]);
 			})
-			.then(done, done.fail);
+			.then(() => done(), done.fail);
 		});
 		it('attaches multiple layers if requested', (done) => {
 			config.layers = layers[0].LayerVersionArn + ',' + layers[1].LayerVersionArn;
@@ -1404,22 +1411,22 @@ describe('create', () => {
 			.then(configuration => {
 				expect(configuration.Layers.map(l => l.Arn)).toEqual(layers.map(l => l.LayerVersionArn));
 			})
-			.then(done, done.fail);
+			.then(() => done(), done.fail);
 		});
 	});
 	describe('dead letter queue support', () => {
 		let snsTopicArn, snsTopicName;
 		beforeAll(done => {
 			snsTopicName = `test-topic-${Date.now()}`;
-			sns.createTopic({
+			sns.send(new CreateTopicCommand({
 				Name: snsTopicName
-			}).promise()
+			}))
 			.then(result => snsTopicArn = result.TopicArn)
-			.then(done);
+			.then(() => done());
 		});
 		afterAll(done => {
 			destroyObjects({snsTopic: snsTopicArn})
-			.then(done, done.fail);
+			.then(() => done(), done.fail);
 		});
 		it('does not set up a DLQ configuration if not requested', done => {
 			createFromDir('hello-world')
@@ -1430,12 +1437,12 @@ describe('create', () => {
 			})
 			.then(roleArn => {
 				const roleName = roleArn.split(':')[5].split('/')[1];
-				return iam.listRolePolicies({ RoleName: roleName }).promise();
+				return iam.send(new ListRolePoliciesCommand({ RoleName: roleName }));
 			})
 			.then(result => {
 				expect(result.PolicyNames.find(t => t === 'dlq-publisher')).toBeFalsy();
 			})
-			.then(done, done.fail);
+			.then(() => done(), done.fail);
 		});
 		it('adds a SNS access policy and DLQ configuration by topic ARN if requested', done => {
 			config['dlq-sns'] = snsTopicArn;
@@ -1447,14 +1454,14 @@ describe('create', () => {
 			})
 			.then(roleArn => {
 				const roleName = roleArn.split(':')[5].split('/')[1];
-				return iam.getRolePolicy({ PolicyName: 'dlq-publisher', RoleName: roleName }).promise();
+				return iam.send(new GetRolePolicyCommand({ PolicyName: 'dlq-publisher', RoleName: roleName }));
 			})
 			.then(policy => {
 				expect(JSON.parse(decodeURIComponent(policy.PolicyDocument)).Statement).toEqual(
 					[{ Effect: 'Allow', Action: ['sns:Publish'], Resource: [snsTopicArn] }]
 				);
 			})
-			.then(done, done.fail);
+			.then(() => done(), done.fail);
 		});
 		it('adds a SNS access policy and DLQ configuration by topic name if requested', done => {
 			config['dlq-sns'] = snsTopicName;
@@ -1466,32 +1473,32 @@ describe('create', () => {
 			})
 			.then(roleArn => {
 				const roleName = roleArn.split(':')[5].split('/')[1];
-				return iam.getRolePolicy({ PolicyName: 'dlq-publisher', RoleName: roleName }).promise();
+				return iam.send(new GetRolePolicyCommand({ PolicyName: 'dlq-publisher', RoleName: roleName }));
 			})
 			.then(policy => {
 				expect(JSON.parse(decodeURIComponent(policy.PolicyDocument)).Statement).toEqual(
 					[{ Effect: 'Allow', Action: ['sns:Publish'], Resource: [snsTopicArn] }]
 				);
 			})
-			.then(done, done.fail);
+			.then(() => done(), done.fail);
 		});
 		describe('when a role is provided', () => {
 			let createdRoleArn, roleName;
 			beforeEach(done => {
 				roleName = `${testRunName}-manual`;
-				return iam.createRole({
+				return iam.send(new CreateRoleCommand({
 					RoleName: roleName,
 					AssumeRolePolicyDocument: executorPolicy()
-				}).promise()
+				}))
 				.then(result => {
 					createdRoleArn = result.Role.Arn;
 				})
-				.then(() => iam.putRolePolicy({
+				.then(() => iam.send(new PutRolePolicyCommand({
 					RoleName: roleName,
 					PolicyName: 'manual-dlq-publisher',
 					PolicyDocument: snsPublishPolicy(snsTopicArn)
-				}).promise())
-				.then(done, done.fail);
+				})))
+				.then(() => done(), done.fail);
 			});
 			afterEach(() => {
 				newObjects.lambdaRole = roleName;
@@ -1507,12 +1514,12 @@ describe('create', () => {
 				})
 				.then(roleArn => {
 					const roleName = roleArn.split(':')[5].split('/')[1];
-					return iam.listRolePolicies({ RoleName: roleName }).promise();
+					return iam.send(new ListRolePoliciesCommand({ RoleName: roleName }));
 				})
 				.then(result => {
 					expect(result.PolicyNames.find(t => t === 'dlq-publisher')).toBeFalsy();
 				})
-				.then(done, done.fail);
+				.then(() => done(), done.fail);
 
 			});
 		});
