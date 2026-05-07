@@ -6,9 +6,13 @@ module.exports = function cleanUpPackage(packageDir, options, logger) {
 	'use strict';
 	const npmOptions = (options && options['npm-options']) ? options['npm-options'].split(' ') : [],
 		dedupe = function () {
+			// `npm dedupe` does NOT inherit --production from the prior install. Combined with
+			// --no-package-lock (which makes dedupe re-resolve every version range), omitting
+			// --production here causes devDependencies to be re-introduced into the package,
+			// inflating the Lambda zip past the 50MB direct-upload limit.
 			return options['optional-dependencies'] === false
 				? runNpm(packageDir, ['dedupe', '-q', '--no-package-lock', '--production', '--no-optional'].concat(npmOptions), logger, true)
-				: runNpm(packageDir, ['dedupe', '-q', '--no-package-lock'].concat(npmOptions), logger, true);
+				: runNpm(packageDir, ['dedupe', '-q', '--no-package-lock', '--production'].concat(npmOptions), logger, true);
 		},
 		runPostPackageScript = function () {
 			const script = options['post-package-script'];

@@ -120,7 +120,7 @@ describe('cleanUpPackage', () => {
 		underTest(sourcedir, {}, logger)
 		.then(() => {
 			expect(logger.getCombinedLog()).toEqual([
-				['call', 'npm dedupe -q --no-package-lock']
+				['call', 'npm dedupe -q --no-package-lock --production']
 			]);
 		})
 		.then(() => done(), done.fail);
@@ -137,7 +137,7 @@ describe('cleanUpPackage', () => {
 		.then(() => {
 			expect(fsUtil.isDir(path.join(sourcedir, 'node_modules', 'uuid'))).toBeFalsy();
 			expect(logger.getCombinedLog()).toEqual([
-				['call', 'npm dedupe -q --no-package-lock'],
+				['call', 'npm dedupe -q --no-package-lock --production'],
 				['call', 'npm run customPack']
 			]);
 		})
