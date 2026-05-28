@@ -1,6 +1,6 @@
 {
   "name": "claudia",
-  "version": "5.14.1",
+  "version": "6.0.1",
   "description": "Deploy Node.js projects to AWS Lambda and API Gateway easily.",
   "license": "MIT",
   "repository": {
@@ -65,18 +65,17 @@
     "@aws-sdk/client-sts": "^3.1026.0",
     "@aws-sdk/credential-providers": "^3.1026.0",
     "@aws-sdk/lib-storage": "^3.1026.0",
-    "archiver": "^7.0.1",
+    "archiver": "^8.0.0",
     "fs-extra": "^11.3.4",
     "glob": "^13.0.6",
     "gunzip-maybe": "^1.4.0",
-    "https-proxy-agent": "^5.0.0",
     "minimal-request-promise": "^1.1.0",
     "minimist": "^1.2.5",
     "oh-no-i-insist": "^1.1.1",
     "sequential-promise-map": "^1.0.0",
-    "tar-fs": "^2.1.1",
-    "uuid": "^8.3.2",
-    "which": "^5.0.0"
+    "tar-fs": "^3.1.2",
+    "uuid": "^14.0.0",
+    "which": "^6.0.1"
   },
   "devDependencies": {
     "@aws-sdk/client-cloudwatch-logs": "^3.1026.0",
@@ -90,12 +89,7 @@
     "jasmine": "^5.13.0",
     "jasmine-spec-reporter": "^7.0.0"
   },
-  "overrides": {
-    "archiver-utils": {
-      "glob": "^13.0.6"
-    }
-  },
   "engines": {
-    "node": ">=20.0.0"
+    "node": ">=20.5.0"
   }
 }

@@ -1,6 +1,6 @@
 const fsUtil = require('../util/fs-util'),
 	tmppath = require('../util/tmppath'),
-	archiver = require('archiver'),
+	{ ZipArchive } = require('archiver'),
 	fs = require('fs');
 module.exports = function zipdir(path) {
 	'use strict';
@@ -11,7 +11,7 @@ module.exports = function zipdir(path) {
 		return Promise.reject(path + ' is not a directory');
 	}
 	return new Promise((resolve, reject) => {
-		const archive = archiver.create('zip', {}),
+		const archive = new ZipArchive({}),
 			zipStream = fs.createWriteStream(targetFile);
 		zipStream.on('close', () => {
 			fsUtil.rmDir(path);
