@@ -66,7 +66,7 @@ describe('pack', () => {
 			expect(fsUtil.isFile(path.join(unpackPath, 'package.json'))).toBeTruthy();
 			expect(fsUtil.isFile(path.join(unpackPath, 'main.js'))).toBeTruthy();
 			expect(fsUtil.isDir(path.join(unpackPath, 'node_modules'))).toBeTruthy();
-			expect(fsUtil.isDir(path.join(unpackPath, 'node_modules', 'aws-sdk'))).toBeTruthy();
+			expect(fsUtil.isDir(path.join(unpackPath, 'node_modules', '@aws-sdk', 'client-s3'))).toBeTruthy();
 			expect(fsUtil.isDir(path.join(unpackPath, 'node_modules', 'huh'))).toBeTruthy();
 		})
 		.then(() => done(), done.fail);
@@ -79,7 +79,7 @@ describe('pack', () => {
 			expect(fsUtil.isFile(path.join(unpackPath, 'package.json'))).toBeTruthy();
 			expect(fsUtil.isFile(path.join(unpackPath, 'main.js'))).toBeTruthy();
 			expect(fsUtil.isDir(path.join(unpackPath, 'node_modules'))).toBeTruthy();
-			expect(fsUtil.isDir(path.join(unpackPath, 'node_modules', 'aws-sdk'))).toBeFalsy();
+			expect(fsUtil.isDir(path.join(unpackPath, 'node_modules', '@aws-sdk', 'client-s3'))).toBeFalsy();
 			expect(fsUtil.isDir(path.join(unpackPath, 'node_modules', 'huh'))).toBeTruthy();
 		})
 		.then(() => done(), done.fail);
@@ -92,7 +92,7 @@ describe('pack', () => {
 			expect(fsUtil.isFile(path.join(unpackPath, 'package.json'))).toBeTruthy();
 			expect(fsUtil.isFile(path.join(unpackPath, 'main.js'))).toBeTruthy();
 			expect(fsUtil.isDir(path.join(unpackPath, 'node_modules'))).toBeTruthy();
-			expect(fsUtil.isDir(path.join(unpackPath, 'node_modules', 'aws-sdk'))).toBeFalsy();
+			expect(fsUtil.isDir(path.join(unpackPath, 'node_modules', '@aws-sdk', 'client-s3'))).toBeFalsy();
 			expect(fsUtil.isDir(path.join(unpackPath, 'node_modules', 'huh'))).toBeTruthy();
 		})
 		.then(() => done(), done.fail);
@@ -129,7 +129,7 @@ describe('pack', () => {
 			expect(fsUtil.isFile(path.join(unpackPath, 'package.json'))).toBeTruthy();
 			expect(fsUtil.isFile(path.join(unpackPath, 'main.js'))).toBeTruthy();
 			expect(fsUtil.isDir(path.join(unpackPath, 'node_modules'))).toBeTruthy();
-			expect(fsUtil.isDir(path.join(unpackPath, 'node_modules', 'aws-sdk'))).toBeFalsy();
+			expect(fsUtil.isDir(path.join(unpackPath, 'node_modules', '@aws-sdk', 'client-s3'))).toBeFalsy();
 			expect(fsUtil.isDir(path.join(unpackPath, 'node_modules', 'huh'))).toBeTruthy();
 		})
 		.then(() => done(), done.fail);
