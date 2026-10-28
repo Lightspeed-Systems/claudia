@@ -17,6 +17,15 @@ describe('validatePackage', () => {
 			const dir = path.join(__dirname, 'test-projects/echo');
 			expect(underTest(dir, 'main.handler')).toEqual(dir);
 		});
+		it('skips validation if the handler is provided by a Lambda layer under /opt', () => {
+			const dir = path.join(__dirname, 'test-projects/echo');
+			expect(underTest(dir, '/opt/nodejs/node_modules/datadog-lambda-js/handler.handler')).toEqual(dir);
+		});
+		it('still validates handlers under an opt directory inside the package', () => {
+			expect(() => {
+				underTest(path.join(__dirname, 'test-projects/echo'), 'opt/main.handler');
+			}).toThrow('cannot require ./opt/main after clean installation. Check your dependencies.');
+		});
 	});
 	describe('when the rest api module is set', () => {
 

@@ -11,6 +11,9 @@ module.exports = function validatePackage(dir, functionHandler, restApiModule) {
 	if (restApiModule) {
 		apiModulePath = restApiModule;
 		handlerMethod = 'proxyRouter';
+	} else if (apiModulePath && apiModulePath.startsWith('/opt/')) {
+		// handler is provided by a Lambda layer (e.g. the Datadog wrapper), not the package
+		return dir;
 	}
 	try {
 		apiModule = require(path.join(dir, apiModulePath));

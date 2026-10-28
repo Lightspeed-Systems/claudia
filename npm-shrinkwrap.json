@@ -1,12 +1,12 @@
 {
   "name": "claudia",
-  "version": "6.0.2",
+  "version": "6.0.3",
   "lockfileVersion": 3,
   "requires": true,
   "packages": {
     "": {
       "name": "claudia",
-      "version": "6.0.2",
+      "version": "6.0.3",
       "license": "MIT",
       "dependencies": {
         "@aws-sdk/client-api-gateway": "^3.1026.0",

@@ -29,6 +29,7 @@ jrunner.loadConfig({
 	'spec_dir': 'spec',
 	'spec_files': [
 		'retriable-wrap-spec.js',
+		'validate-package-spec.js',
 		'list-wrappable-functions-spec.js',
 		'count-elements-spec.js',
 		'array-logger-spec.js',
